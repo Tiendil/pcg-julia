@@ -135,6 +135,10 @@ const Cells = Array{Cell, 1}
 Point(cell::Cell) = Point(cell.x, cell.y)
 
 
+Base.:+(a::Point, b::Cell) = Point(a.x + b.x,
+                                   a.y + b.y)
+
+
 # TODO: rewrite to Channel or other generator
 function cells_rectangle(width::Int64, height::Int64)
     # TODO: rewrite
@@ -154,11 +158,11 @@ end
 
 
 mutable struct Topology
-    _connectomes::Array{Any, 1}
+    _connectomes::Dict{String, Any}
     _indexes::Dict{Point, Union{Nothing, Int64}}
 end
 
-Topology(coordinates) = Topology([],
+Topology(coordinates) = Topology(Dict{String, Any}(),
                                  Dict(Point(cell) => nothing for cell in coordinates))
 
 Base.length(topology::Topology) = length(topology._indexes)
@@ -208,6 +212,9 @@ mutable struct Node
     properties::Any
 
     Node(properties::Any) = new(0, Point(0, 0), nothing, nothing, properties)
+    function Node(index::Int32, coordinates::Point, _new_node::Union{Nothing, Node}, space::Union{Nothing, Space}, properties::Any)
+        return new(index, coordinates, _new_node, space, properties)
+    end
 end
 
 Node() = Node(nothing)
@@ -218,11 +225,11 @@ Base.zero(::Type{Node}) = Node(nothing)
 
 # TODO: replace with template copy method?
 function copy(node::Node)
-    return Node(index=node.index,
-                coordinates=node.coordinates,
-                _new_node=nothing,
-                space=node.space,
-                properties=copy(node.properties))
+    return Node(node.index,
+                node.coordinates,
+                nothing,
+                node.space,
+                copy(node.properties))
 end
 
 
@@ -275,12 +282,10 @@ function base_nodes(callback::Any, space::Space{Node}, filter::Any, indexes::Any
         end
     end
 
-    # return new_nodes
 end
 
 
 base_nodes(callback::Any, space::Space{Node}, filter::Any) = base_nodes(callback, space, filter, 1:length(space))
-
 
 function node_position(recorder::Drawer, node::Node, canvas_size::Point)
     # TODO: is it right?
@@ -330,6 +335,113 @@ function check(parameters::Fraction, node::Node)
     return rand(Float32) < parameters.border
 end
 
+
+function square_distance(a::Cell, b::Cell=Cell(0.0, 0.0))
+    return max(abs(a.x-b.x), abs(a.y-b.y))
+end
+
+
+function square_area_template(min_distance::Int64, max_distance::Int64)
+    area = []
+
+    for dx in (-max_distance):(max_distance + 1)
+        for dy in (-max_distance):(max_distance + 1)
+
+            cell = Cell(dx, dy)
+
+            if min_distance <= square_distance(cell) <= max_distance
+                push!(area, cell)
+            end
+        end
+    end
+
+    return area
+end
+
+
+function area_indexes(topology::Topology, coordinates::Points)
+    area = []
+
+    for point in coordinates
+        index = get(topology._indexes, point, nothing)
+
+        if isnothing(index)
+            continue
+        end
+
+        push!(area, index)
+    end
+
+    return area
+end
+
+
+function square_area(topology::Topology, min_distance::Int64, max_distance::Int64)
+    cache::Array{Union{Nothing, Any}} = [nothing for _ in 1:length(topology)]
+
+    template = square_area_template(min_distance, max_distance)
+
+    for (center, index) in topology._indexes
+        points = [center + point for point in template]
+        # println("---------------")
+        # println("center: $center")
+        # println("index: $index")
+        # println("points: $points")
+
+        cache[index] = area_indexes(topology, points)
+    end
+
+    return cache
+end
+
+
+function square_ring_connectom(topology::Topology, min_distance::Int64, max_distance=Int64)
+    return square_area(topology, min_distance, max_distance)
+end
+
+
+struct Area
+    space::Space{Node}
+    indexes::Any
+
+    function Area(node::Node, min_distance=1, max_distance=nothing)
+        if isnothing(max_distance)
+            max_distance = min_distance
+        end
+
+        # TODO: replace first part of uid (was "self.__class__.__name__") to smth else
+        # TODO: make better (by performance) key
+        connectome_uid = "xxx-$min_distance-$max_distance"
+
+        if haskey(node.space.topology._connectomes, connectome_uid)
+            connectome = node.space.topology._connectomes[connectome_uid]
+        else
+            connectome = square_ring_connectom(node.space.topology, min_distance, max_distance)
+            node.space.topology._connectomes[connectome_uid] = connectome
+        end
+
+        return new(node.space, connectome[node.index])
+    end
+
+end
+
+
+function area_nodes(area::Area, filter::Any)
+    nodes = []
+
+    # println(area.indexes)
+    for i in area.indexes
+        node = space._base_nodes[i]
+
+        if check(filter, node)
+            push!(nodes, node)
+        end
+    end
+
+    return nodes
+end
+
+
 ############################################
 
 const STEPS = 100
@@ -348,13 +460,34 @@ mutable struct NodeProperties
 end
 
 
+function copy(properties::NodeProperties)
+    return NodeProperties(properties.state)
+end
+
+
+function check(parameters::State, node::Node)
+    return node.properties.state == parameters
+end
+
+
+# TODO: replace with more abstract logic
+function change_state(node::Node, state::State)
+    if isnothing(node._new_node)
+        # TODO: does two instances required?
+        node._new_node = copy(node)
+        node.space._new_nodes[node.index] = node._new_node
+    end
+
+    node._new_node.properties.state = state
+end
+
+
 Base.zero(::Type{NodeProperties}) = NodeProperties(DEAD)
 
 
 # TODO: what convention for name of that method in julia?
 # TODO: rewrite to call(a, b, c) do … end syntax ? where … is node fabric
 function initialize(space::Space{Node}, base_node::Node)
-    base_node.space = space
 
     space._base_nodes = [Node() for _ in 1:length(space.topology)]
     space._new_nodes = typeof(space._new_nodes)(nothing, length(space.topology))
@@ -362,6 +495,7 @@ function initialize(space::Space{Node}, base_node::Node)
     for (i, coordinates) in enumerate(coordinates(space.topology))
         node = space._base_nodes[i]
 
+        node.space = space
         node.coordinates = coordinates
         node.index = i
         node.properties = zero(NodeProperties)
@@ -420,26 +554,27 @@ step(space) do space
     end
 end
 
-# for i in range(STEPS):
-#     print("step $(i+1)/$STEPS")
+for i in 1:STEPS
+    println("step $(i+1)/$STEPS")
 
-#     space.step() do space
+    step(space) do space
 
-#         space.base(ALIVE) do node
-#             if square_grid.Ring(node).base(ALIVE) | ~Between(2, 3):
-#                 node <<= DEAD
-#             end
-#         end
+        base_nodes(space, ALIVE) do node
+            # TODO replace with chain calculation
+            if !(2 <= length(area_nodes(Area(node), ALIVE)) <= 3)
+                change_state(node, DEAD)
+            end
+        end
 
-#         space.base(DEAD) do node
-#             if square_grid.Ring(node).base(ALIVE) | Count(3):
-#                 node <<= ALIVE
-#             end
-#         end
+        base_nodes(space, DEAD) do node
+            if length(area_nodes(Area(node), ALIVE)) == 3
+                change_state(node, ALIVE)
+            end
+        end
 
-#     end
+    end
 
-# end
+end
 
 save_image(drawer, "output.webm")
 
