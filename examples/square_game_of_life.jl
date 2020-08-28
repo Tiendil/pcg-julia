@@ -1,17 +1,12 @@
 
-# extenral packages:
-#
-# - JuliaImages
-# - FileIO
-# - ImageMagick
-# - Reel
-#
-
 using Images
 
 using PCG
 using PCG.Geometry
-using PCG.Drawer
+using PCG.SquareGreed
+using PCG.Topologies
+using PCG.Recorders
+using PCG.Spaces
 
 ############################################
 # temporary code
@@ -20,169 +15,6 @@ using PCG.Drawer
 # TODO: remove
 const CELL_SIZE = Size(5, 5)
 
-struct Cell
-    x::Int32
-    y::Int32
-end
-
-Cell() = Cell(0, 0)
-
-# TODO: must differe between different topologies
-const Cells = Array{Cell, 1}
-
-PCG.Geometry.Point(cell::Cell) = Point(cell.x, cell.y)
-
-Base.:+(a::Point, b::Cell) = Point(a.x + b.x,
-                                   a.y + b.y)
-
-
-# TODO: rewrite to Channel or other generator
-function cells_rectangle(width::Int64, height::Int64)
-    # TODO: rewrite
-    cells = [Cell() for _ in 1:width*height]
-
-    i = 1
-
-    # TODO: rewrite to single loop
-    for y in 1:height,
-        x in 1:width
-        cells[i] = Cell(x, y)
-        i += 1
-    end
-
-    return cells
-end
-
-
-mutable struct Topology
-    _connectomes::Dict{String, Any}
-    _indexes::Dict{Point, Union{Nothing, Int64}}
-end
-
-Topology(coordinates) = Topology(Dict{String, Any}(),
-                                 Dict(Point(cell) => nothing for cell in coordinates))
-
-Base.length(topology::Topology) = length(topology._indexes)
-
-function coordinates(topology::Topology)
-    return keys(topology._indexes)
-end
-
-
-function register_index!(topology::Topology, coordinate::Point, index::Int64)
-    topology._indexes[coordinate] = index
-end
-
-
-mutable struct Space{NODE}
-    _base_nodes::Array{NODE}
-    _new_nodes::Array{Union{Nothing, NODE}}
-    topology::Topology
-    _recorders::Array{Recorder}
-end
-
-Space{NODE}(topology::Topology, recorders::Array{Recorder}) where NODE = Space{NODE}([], [], topology, recorders)
-
-
-function cells_bounding_box(cells::Cells)
-    box = BoundingBox(cells[1])
-
-    # TODO: rewrite to reduce or smth else?
-    for cell in cells[2:end]
-        # TODO: rewrite to convert or smth else
-        box += BoundingBox(cell)
-    end
-
-    return box
-
-end
-
-
-
-mutable struct Node
-    index::Int32
-    coordinates::Point
-    _new_node::Union{Nothing, Node}
-    space::Union{Nothing, Space}
-
-    # TODO: replace Any with template parameter declaration
-    properties::Any
-
-    Node(properties::Any) = new(0, Point(0, 0), nothing, nothing, properties)
-    function Node(index::Int32, coordinates::Point, _new_node::Union{Nothing, Node}, space::Union{Nothing, Space}, properties::Any)
-        return new(index, coordinates, _new_node, space, properties)
-    end
-end
-
-Node() = Node(nothing)
-
-# TODO: is it right?
-Base.zero(::Type{Node}) = Node(nothing)
-
-
-# TODO: replace with template copy method?
-function copy(node::Node)
-    return Node(node.index,
-                node.coordinates,
-                nothing,
-                node.space,
-                copy(node.properties))
-end
-
-
-function calculate_canvas_size(recorder::Recorder, nodes::Array{Node, 1})
-
-    # TODO: rewrite to redefiend function?
-    if isempty(nodes)
-        return BoundingBox()
-    end
-
-    coordinates = [node.coordinates for node in nodes]
-
-    return ceil(Size(BoundingBox(coordinates)) * recorder.cell_size)
-end
-
-
-Base.length(space::Space{Node}) = length(space._base_nodes)
-
-
-function record_state(space::Space{Node})
-    for recorder in space._recorders
-        record_state(space, recorder)
-    end
-end
-
-
-function step(callback::Any, space::Space{Node})
-
-    callback(space)
-
-    for (i, node) in enumerate(space._new_nodes)
-        if !isnothing(node)
-            space._base_nodes[i] = node
-            space._new_nodes[i] = nothing
-        end
-    end
-
-    record_state(space)
-end
-
-
-# TODO: replace Any with appropriate type
-# TODO: does "callback" good solution?
-function base_nodes(callback::Any, space::Space{Node}, filter::Any, indexes::Any)
-    for i in indexes
-        node = space._base_nodes[i]
-
-        if check(filter, node)
-            callback(node)
-        end
-    end
-
-end
-
-
-base_nodes(callback::Any, space::Space{Node}, filter::Any) = base_nodes(callback, space, filter, 1:length(space))
 
 function node_position(recorder::Recorder, node::Node, canvas_size::Size)
     # TODO: is it right?
@@ -190,9 +22,9 @@ function node_position(recorder::Recorder, node::Node, canvas_size::Size)
 end
 
 
-function record_state(space::Space{Node}, recorder::Recorder)
+function Spaces.record_state(space::Space{Node}, recorder::Recorder)
 
-    canvas_size = calculate_canvas_size(recorder, space._base_nodes)
+    canvas_size = ceil(space_size(space._base_nodes) * recorder.cell_size)
 
     # TODO: fill with monotone color (use zeros? https://docs.julialang.org/en/v1/base/arrays/#Base.zeros)
     canvas = rand(RGB, Int64(canvas_size.y), Int64(canvas_size.x))
@@ -227,64 +59,12 @@ struct Fraction
     border::Float32
 end
 
-# TODO: choose better name?
-function check(parameters::Fraction, node::Node)
-    return rand(Float32) < parameters.border
-end
 
-
-function square_distance(a::Cell, b::Cell=Cell(0.0, 0.0))
-    return max(abs(a.x-b.x), abs(a.y-b.y))
-end
-
-
-function square_area_template(min_distance::Int64, max_distance::Int64)
-    area = []
-
-    for dx in (-max_distance):(max_distance + 1)
-        for dy in (-max_distance):(max_distance + 1)
-
-            cell = Cell(dx, dy)
-
-            if min_distance <= square_distance(cell) <= max_distance
-                push!(area, cell)
-            end
-        end
-    end
-
-    return area
-end
-
-
-function area_indexes(topology::Topology, coordinates::Points)
-    area = []
-
-    for point in coordinates
-        index = get(topology._indexes, point, nothing)
-
-        if isnothing(index)
-            continue
-        end
-
-        push!(area, index)
-    end
-
-    return area
-end
-
-
-function square_area(topology::Topology, min_distance::Int64, max_distance::Int64)
+function square_area(topology::Topology, template::Cells)
     cache::Array{Union{Nothing, Any}} = [nothing for _ in 1:length(topology)]
-
-    template = square_area_template(min_distance, max_distance)
 
     for (center, index) in topology._indexes
         points = [center + point for point in template]
-        # println("---------------")
-        # println("center: $center")
-        # println("index: $index")
-        # println("points: $points")
-
         cache[index] = area_indexes(topology, points)
     end
 
@@ -293,7 +73,8 @@ end
 
 
 function square_ring_connectom(topology::Topology, min_distance::Int64, max_distance=Int64)
-    return square_area(topology, min_distance, max_distance)
+    template = square_area_template(min_distance, max_distance)
+    return square_area(topology, template)
 end
 
 
@@ -330,7 +111,7 @@ function area_nodes(area::Area, filter::Any)
     for i in area.indexes
         node = space._base_nodes[i]
 
-        if check(filter, node)
+        if check(node, filter)
             push!(nodes, node)
         end
     end
@@ -341,7 +122,7 @@ end
 
 ############################################
 
-const STEPS = 100
+const TURNS = 100
 const WIDTH = 80
 const HEIGHT = 80
 
@@ -357,21 +138,11 @@ mutable struct NodeProperties
 end
 
 
-function copy(properties::NodeProperties)
-    return NodeProperties(properties.state)
-end
-
-
-function check(parameters::State, node::Node)
-    return node.properties.state == parameters
-end
-
-
 # TODO: replace with more abstract logic
 function change_state(node::Node, state::State)
     if isnothing(node._new_node)
         # TODO: does two instances required?
-        node._new_node = copy(node)
+        node._new_node = deepcopy(node)
         node.space._new_nodes[node.index] = node._new_node
     end
 
@@ -405,15 +176,20 @@ function initialize(space::Space{Node}, base_node::Node)
 end
 
 
+# TODO: choose better name?
+function Spaces.check(node::Node, parameters::Fraction)
+    return rand(Float32) < parameters.border
+end
 
-function check_node(node::Node, state::State)
-    return node.properties.state == state
+
+function Spaces.check(node::Node, parameters::State)
+    return node.properties.state == parameters
 end
 
 
 function choose_biome(drawer::Recorder, node::Node)
     for biome in drawer._biomes
-        if check_node(node, biome.checker)
+        if check(node, biome.checker)
             return biome
         end
     end
@@ -443,7 +219,7 @@ initialize(space, Node(NodeProperties(DEAD)))
 # generate
 ##########
 
-step(space) do space
+turn(space) do space
 
     # TODO: rewrite?
     base_nodes(space, Fraction(0.2)) do node
@@ -451,10 +227,10 @@ step(space) do space
     end
 end
 
-for i in 1:STEPS
-    println("step $(i+1)/$STEPS")
+for i in 1:TURNS
+    println("turn $(i+1)/$TURNS")
 
-    step(space) do space
+    turn(space) do space
 
         base_nodes(space, ALIVE) do node
             # TODO replace with chain calculation
