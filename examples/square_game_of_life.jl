@@ -7,120 +7,18 @@
 # - Reel
 #
 
-using Images, FileIO, Reel
+using Images
+
+using PCG
+using PCG.Geometry
+using PCG.Drawer
 
 ############################################
 # temporary code
 ############################################
 
-struct Point
-    x::Float32
-    y::Float32
-end
-
-
-Base.ceil(point::Point) = Point(ceil(point.x),
-                                ceil(point.y))
-
-Base.:-(a::Point, b::Point) = Point(a.x - b.x,
-                                    a.y - b.y)
-
-Base.:*(a::Point, b::Point) = Point(a.x * b.x,
-                                    a.y * b.y)
-
-Base.:/(a::Point, b::Int64) = Point(a.x / b,
-                                    a.y / b)
-
-const Points = Array{Point, 1}
-
-
 # TODO: remove
-const CELL_SIZE = Point(5, 5)
-
-
-struct Size
-    x::Float32
-    y::Float32
-end
-
-# TODO: bad decision?
-Base.:*(a::Size, b::Point) = Point(a.x * b.x,
-                                   a.y * b.y)
-
-
-struct BoundingBox
-    x_min::Float32
-    x_max::Float32
-    y_min::Float32
-    y_max::Float32
-end
-
-
-Base.:+(a::BoundingBox, b::BoundingBox) = BoundingBox(min(a.x_min, b.x_min),
-                                                      max(a.x_max, b.x_max),
-                                                      min(a.y_min, b.y_min),
-                                                      max(a.y_max, b.y_max))
-
-BoundingBox() = BoundingBox(0.0, 0.0, 0.0, 0.0)
-
-BoundingBox(point::Point) = BoundingBox(point.x, point.x + 1,
-                                        point.y, point.y + 1)
-
-BoundingBox(points::Points) = reduce(+, BoundingBox.(points), init=BoundingBox(points[1]))
-
-
-Size(box::BoundingBox) = Size(box.x_max - box.x_min,
-                              box.y_max - box.y_min)
-
-
-struct Sprite
-    color::Any
-    _image::Any
-end
-
-Sprite(color) = Sprite(color, fill(color, (Int64(CELL_SIZE.y), Int64(CELL_SIZE.x))))
-
-
-struct Biome
-    checker::Any
-    sprite::Sprite
-end
-
-
-mutable struct Drawer
-    cell_size::Point
-    duration::Int32
-    filename::String
-
-    _biomes::Array{Biome, 1}
-    _frames::Array{Any, 1}
-end
-
-Drawer(cell_size::Point, duration::Int32, filename::String) = Drawer(cell_size,
-                                                                     duration,
-                                                                     filename,
-                                                                     [],
-                                                                     [])
-
-
-
-function add_biome(drawer::Drawer, biome::Biome)
-    push!(drawer._biomes, biome)
-end
-
-
-function save_image(drawer::Drawer, filename::String)
-
-    frames = Frames(MIME("image/png"), fps=1.0 / (drawer.duration / 1000))
-
-    # TODO: rewrite to dot syntax
-    for frame in drawer._frames
-        push!(frames, frame)
-    end
-
-    write(filename, frames)
-end
-
+const CELL_SIZE = Size(5, 5)
 
 struct Cell
     x::Int32
@@ -132,8 +30,7 @@ Cell() = Cell(0, 0)
 # TODO: must differe between different topologies
 const Cells = Array{Cell, 1}
 
-Point(cell::Cell) = Point(cell.x, cell.y)
-
+PCG.Geometry.Point(cell::Cell) = Point(cell.x, cell.y)
 
 Base.:+(a::Point, b::Cell) = Point(a.x + b.x,
                                    a.y + b.y)
@@ -181,10 +78,10 @@ mutable struct Space{NODE}
     _base_nodes::Array{NODE}
     _new_nodes::Array{Union{Nothing, NODE}}
     topology::Topology
-    _recorders::Array{Drawer}
+    _recorders::Array{Recorder}
 end
 
-Space{NODE}(topology::Topology, recorders::Array{Drawer}) where NODE = Space{NODE}([], [], topology, recorders)
+Space{NODE}(topology::Topology, recorders::Array{Recorder}) where NODE = Space{NODE}([], [], topology, recorders)
 
 
 function cells_bounding_box(cells::Cells)
@@ -233,7 +130,7 @@ function copy(node::Node)
 end
 
 
-function calculate_canvas_size(recorder::Drawer, nodes::Array{Node, 1})
+function calculate_canvas_size(recorder::Recorder, nodes::Array{Node, 1})
 
     # TODO: rewrite to redefiend function?
     if isempty(nodes)
@@ -287,13 +184,13 @@ end
 
 base_nodes(callback::Any, space::Space{Node}, filter::Any) = base_nodes(callback, space, filter, 1:length(space))
 
-function node_position(recorder::Drawer, node::Node, canvas_size::Point)
+function node_position(recorder::Recorder, node::Node, canvas_size::Size)
     # TODO: is it right?
     return (node.coordinates - Point(1.0, 1.0)) * recorder.cell_size
 end
 
 
-function record_state(space::Space{Node}, recorder::Drawer)
+function record_state(space::Space{Node}, recorder::Recorder)
 
     canvas_size = calculate_canvas_size(recorder, space._base_nodes)
 
@@ -514,7 +411,7 @@ function check_node(node::Node, state::State)
 end
 
 
-function choose_biome(drawer::Drawer, node::Node)
+function choose_biome(drawer::Recorder, node::Node)
     for biome in drawer._biomes
         if check_node(node, biome.checker)
             return biome
@@ -527,11 +424,11 @@ end
 # visualizer
 ############
 
-drawer = Drawer(CELL_SIZE, convert(Int32, 100), "./example.webp")
+drawer = Recorder(CELL_SIZE, convert(Int32, 100), "./example.webp")
 
-add_biome(drawer, Biome(ALIVE, Sprite(RGBA(1, 1, 1))))
-add_biome(drawer, Biome(DEAD, Sprite(RGBA(0, 0, 0))))
-# add_biome(drawer, Biome(All(), Sprite(RGBA(1, 0, 0))))
+add_biome(drawer, Biome(ALIVE, Sprite(RGBA(1, 1, 1), CELL_SIZE)))
+add_biome(drawer, Biome(DEAD, Sprite(RGBA(0, 0, 0), CELL_SIZE)))
+# add_biome(drawer, Biome(All(), Sprite(RGBA(1, 0, 0), CELL_SIZE)))
 
 ###########
 # generator

@@ -1,0 +1,8 @@
+name = "PCG"
+uuid = "0d48aa12-5ee3-42b6-8807-943954e7f1c5"
+authors = ["Aleksey Yeletsky (Tiendil) <a.eletsky@gmail.com>"]
+version = "0.1.0"
+
+[deps]
+Images = "916415d5-f1e6-5110-898d-aaa5f9f070e0"
+Reel = "71555da5-176e-5e73-a222-aebc6c6e4f2f"
