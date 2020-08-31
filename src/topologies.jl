@@ -1,31 +1,35 @@
 module Topologies
 
 using ..PCG.Geometry: Point, Points
+using ..PCG.Types: Cells
+using ..PCG.Spaces: Space
 
-export Topology, coordinates, register_index!, area_indexes
+export Topology, register!, area_indexes, area
+
+const Index = Int64
 
 mutable struct Topology
-    _connectomes::Dict{String, Any}
-    _indexes::Dict{Point, Union{Nothing, Int64}}
+    # TODO: replace with function?
+    _indexes::Dict{Point, Index}
 end
 
-Topology(coordinates) = Topology(Dict{String, Any}(),
-                                 Dict(Point(cell) => nothing for cell in coordinates))
+Topology() = Topology(Dict{Point, Index}())
 
 Base.length(topology::Topology) = length(topology._indexes)
 
-function coordinates(topology::Topology)
-    return keys(topology._indexes)
-end
+# function coordinates(topology::Topology)
+#     return keys(topology._indexes)
+# end
 
 
-function register_index!(topology::Topology, coordinate::Point, index::Int64)
-    topology._indexes[coordinate] = index
+# TODO: replace coordinates & index with node
+function register!(topology::Topology, coordinates::Point, index::Index)
+    topology._indexes[coordinates] = index
 end
 
 
 function area_indexes(topology::Topology, coordinates::Points)
-    area = []
+    area::Array{Index, 1} = []
 
     for point in coordinates
         index = get(topology._indexes, point, nothing)
@@ -38,6 +42,18 @@ function area_indexes(topology::Topology, coordinates::Points)
     end
 
     return area
+end
+
+
+function area(topology::Topology, template::Cells)
+    cache::Array{Union{Nothing, Any}} = [nothing for _ in 1:length(topology)]
+
+    for (center, index) in topology._indexes
+        points = [center + point for point in template]
+        cache[index] = area_indexes(topology, points)
+    end
+
+    return cache
 end
 
 

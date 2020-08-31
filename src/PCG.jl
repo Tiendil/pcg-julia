@@ -1,7 +1,13 @@
 module PCG
 
+include("types.jl")
+import .Types
+
 include("geometry.jl")
 import .Geometry
+
+include("spaces.jl")
+import .Spaces
 
 include("topologies.jl")
 import .Topologies
@@ -11,8 +17,5 @@ import .SquareGreed
 
 include("recorders.jl")
 import .Recorders
-
-include("spaces.jl")
-import .Spaces
 
 end

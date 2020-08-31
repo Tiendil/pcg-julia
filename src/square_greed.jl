@@ -1,36 +1,37 @@
 module SquareGreed
 
 using ..PCG.Geometry: Point
+using ..PCG.Types: Cell, Cells
 
-export Cell, Cells, cells_rectangle, square_area_template
+export SquareCell, SquareCells, cells_rectangle, square_area_template
 
-struct Cell
+struct SquareCell <: Cell
     x::Int32
     y::Int32
 end
 
-Cell() = Cell(0, 0)
+const SquareCells = Array{SquareCell, 1}
 
-# TODO: must differe between different topologies
-const Cells = Array{Cell, 1}
+SquareCell() = SquareCell(0, 0)
 
-Point(cell::Cell) = Point(cell.x, cell.y)
+# TODO: move somewere or remove
+Point(cell::SquareCell) = Point(cell.x, cell.y)
 
-Base.:+(a::Point, b::Cell) = Point(a.x + b.x,
-                                   a.y + b.y)
+Base.:+(a::Point, b::SquareCell) = Point(a.x + b.x,
+                                         a.y + b.y)
 
 
 # TODO: rewrite to Channel or other generator
 function cells_rectangle(width::Int64, height::Int64)
     # TODO: rewrite
-    cells = [Cell() for _ in 1:width*height]
+    cells = [SquareCell() for _ in 1:width*height]
 
     i = 1
 
     # TODO: rewrite to single loop
     for y in 1:height,
         x in 1:width
-        cells[i] = Cell(x, y)
+        cells[i] = SquareCell(x, y)
         i += 1
     end
 
@@ -38,7 +39,7 @@ function cells_rectangle(width::Int64, height::Int64)
 end
 
 
-function cells_bounding_box(cells::Cells)
+function cells_bounding_box(cells::SquareCells)
     box = BoundingBox(cells[1])
 
     # TODO: rewrite to reduce or smth else?
@@ -52,18 +53,18 @@ function cells_bounding_box(cells::Cells)
 end
 
 
-function square_distance(a::Cell, b::Cell=Cell(0.0, 0.0))
+function square_distance(a::SquareCell, b::SquareCell=SquareCell(0.0, 0.0))
     return max(abs(a.x-b.x), abs(a.y-b.y))
 end
 
 
 function square_area_template(min_distance::Int64, max_distance::Int64)
-    area = Cells()
+    area = SquareCells()
 
     for dx in (-max_distance):(max_distance + 1)
         for dy in (-max_distance):(max_distance + 1)
 
-            cell = Cell(dx, dy)
+            cell = SquareCell(dx, dy)
 
             if min_distance <= square_distance(cell) <= max_distance
                 push!(area, cell)

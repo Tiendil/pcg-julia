@@ -8,6 +8,8 @@ using PCG.Topologies
 using PCG.Recorders
 using PCG.Spaces
 
+using PCG.Types
+
 ############################################
 # temporary code
 ############################################
@@ -16,107 +18,41 @@ using PCG.Spaces
 const CELL_SIZE = Size(5, 5)
 
 
-function node_position(recorder::Recorder, node::Node, canvas_size::Size)
-    # TODO: is it right?
-    return (node.coordinates - Point(1.0, 1.0)) * recorder.cell_size
-end
-
-
-function Spaces.record_state(space::Space{Node}, recorder::Recorder)
-
-    canvas_size = ceil(space_size(space._base_nodes) * recorder.cell_size)
-
-    # TODO: fill with monotone color (use zeros? https://docs.julialang.org/en/v1/base/arrays/#Base.zeros)
-    canvas = rand(RGB, Int64(canvas_size.y), Int64(canvas_size.x))
-
-    for node in space._base_nodes
-        biome = choose_biome(recorder, node)
-
-        position = node_position(recorder, node, canvas_size)
-
-        image = biome.sprite._image
-
-        # TODO: move out?
-        sprite_size = size(image)
-
-        x = Int64(position.x) + 1
-        y = Int64(position.y) + 1
-
-        # TODO: round position correctly
-        copyto!(canvas,
-                # TODO: does indexes places right?
-                # TODO: fix size calculation
-                CartesianIndices((x:(x+sprite_size[1]-1), y:(y+sprite_size[2]-1))),
-                image,
-                CartesianIndices((1:sprite_size[1], 1:sprite_size[2])))
-    end
-
-    push!(recorder._frames, canvas)
-end
-
-
 struct Fraction
     border::Float32
 end
 
 
-function square_area(topology::Topology, template::Cells)
-    cache::Array{Union{Nothing, Any}} = [nothing for _ in 1:length(topology)]
+#########################
+# ? filters
+#########################
 
-    for (center, index) in topology._indexes
-        points = [center + point for point in template]
-        cache[index] = area_indexes(topology, points)
-    end
-
-    return cache
+struct All
+    space::Space
 end
 
 
-function square_ring_connectom(topology::Topology, min_distance::Int64, max_distance=Int64)
-    template = square_area_template(min_distance, max_distance)
-    return square_area(topology, template)
+function (all::All)()
+    return all.space._base_nodes
 end
 
 
-struct Area
-    space::Space{Node}
+struct Neighbors
     indexes::Any
 
-    function Area(node::Node, min_distance=1, max_distance=nothing)
-        if isnothing(max_distance)
-            max_distance = min_distance
-        end
-
-        # TODO: replace first part of uid (was "self.__class__.__name__") to smth else
-        # TODO: make better (by performance) key
-        connectome_uid = "xxx-$min_distance-$max_distance"
-
-        if haskey(node.space.topology._connectomes, connectome_uid)
-            connectome = node.space.topology._connectomes[connectome_uid]
-        else
-            connectome = square_ring_connectom(node.space.topology, min_distance, max_distance)
-            node.space.topology._connectomes[connectome_uid] = connectome
-        end
-
-        return new(node.space, connectome[node.index])
+    function Neighbors(topology::Topology)
+        template = square_area_template(1, 1)
+        indexes = area(topology, template)
+        return new(indexes)
     end
 
 end
 
 
-function area_nodes(area::Area, filter::Any)
-    nodes = []
-
-    # println(area.indexes)
-    for i in area.indexes
-        node = space._base_nodes[i]
-
-        if check(node, filter)
-            push!(nodes, node)
-        end
-    end
-
-    return nodes
+function (connectome::Neighbors)(node::Node)
+    return [space._base_nodes[index]
+            for index in connectome.indexes[node.index]
+            if node.index != index]
 end
 
 
@@ -155,21 +91,16 @@ Base.zero(::Type{NodeProperties}) = NodeProperties(DEAD)
 
 # TODO: what convention for name of that method in julia?
 # TODO: rewrite to call(a, b, c) do … end syntax ? where … is node fabric
-function initialize(space::Space{Node}, base_node::Node)
+function initialize(space::Space{Node}, coordinates::SquareCells)
 
-    space._base_nodes = [Node() for _ in 1:length(space.topology)]
-    space._new_nodes = typeof(space._new_nodes)(nothing, length(space.topology))
+    for cell in coordinates
+        node = Node()
+        node.properties = NodeProperties(DEAD)
+        node.coordinates = Point(cell)
 
-    for (i, coordinates) in enumerate(coordinates(space.topology))
-        node = space._base_nodes[i]
-
-        node.space = space
-        node.coordinates = coordinates
-        node.index = i
-        node.properties = zero(NodeProperties)
-
-        # TODO: is that working?
-        register_index!(space.topology, coordinates, i)
+        # TODO: remove ambiguous name register! ??
+        Spaces.register!(space, node)
+        Topologies.register!(topology, node.coordinates, node.index)
     end
 
     record_state(space)
@@ -186,13 +117,8 @@ function Spaces.check(node::Node, parameters::State)
     return node.properties.state == parameters
 end
 
-
-function choose_biome(drawer::Recorder, node::Node)
-    for biome in drawer._biomes
-        if check(node, biome.checker)
-            return biome
-        end
-    end
+function filter(nodes::Array{Node, 1}, parameters::State)
+    return [node for node in nodes if check(node, parameters)]
 end
 
 
@@ -200,7 +126,7 @@ end
 # visualizer
 ############
 
-drawer = Recorder(CELL_SIZE, convert(Int32, 100), "./example.webp")
+drawer = Recorder2D(CELL_SIZE, convert(Int32, 100), "./example.webp")
 
 add_biome(drawer, Biome(ALIVE, Sprite(RGBA(1, 1, 1), CELL_SIZE)))
 add_biome(drawer, Biome(DEAD, Sprite(RGBA(0, 0, 0), CELL_SIZE)))
@@ -210,42 +136,48 @@ add_biome(drawer, Biome(DEAD, Sprite(RGBA(0, 0, 0), CELL_SIZE)))
 # generator
 ###########
 
-topology = Topology(cells_rectangle(WIDTH, HEIGHT))
+topology = Topology()
 
-space = Space{Node}(topology, [drawer])
-initialize(space, Node(NodeProperties(DEAD)))
+space = Space{Node}([drawer])
+initialize(space, cells_rectangle(WIDTH, HEIGHT))
+
+# TODO: all filters must be updated on topology update
+#       better to check topology version on each filter call?
+all = All(space)
+neighbors = Neighbors(topology)
 
 ##########
 # generate
 ##########
 
-turn(space) do space
-
-    # TODO: rewrite?
-    base_nodes(space, Fraction(0.2)) do node
+for node in all()
+    # TODO: construct Fraction(0.2) only once
+    if check(node, Fraction(0.2))
         node.properties.state = ALIVE  # TODO: rewrite for macros or smth else
     end
 end
 
+apply_changes(space)
+
+
 for i in 1:TURNS
     println("turn $(i+1)/$TURNS")
 
-    turn(space) do space
-
-        base_nodes(space, ALIVE) do node
-            # TODO replace with chain calculation
-            if !(2 <= length(area_nodes(Area(node), ALIVE)) <= 3)
+    for node in all()
+        if check(node, ALIVE)
+            if !(2 <= length(filter(neighbors(node), ALIVE)) <= 3)
                 change_state(node, DEAD)
             end
         end
 
-        base_nodes(space, DEAD) do node
-            if length(area_nodes(Area(node), ALIVE)) == 3
+        if check(node, DEAD)
+            if length(filter(neighbors(node), ALIVE)) == 3
                 change_state(node, ALIVE)
             end
         end
-
     end
+
+    apply_changes(space)
 
 end
 

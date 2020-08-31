@@ -1,23 +1,21 @@
 module Spaces
 
 using ..PCG.Geometry: Point, BoundingBox, Size
-using ..PCG.Topologies: Topology
-using ..PCG.Recorders: Recorder
+using ..PCG.Types: Recorder, Recorders
 
-export Space, Node, record_state, turn, space_size, base_nodes, check
+export Space, Node, record_state, turn, space_size, check, register!, apply_changes
 
 mutable struct Space{NODE}
     _base_nodes::Array{NODE}
     _new_nodes::Array{Union{Nothing, NODE}}
-    topology::Topology
-    _recorders::Array{Recorder}
+    _recorders::Recorders
 end
 
-Space{NODE}(topology::Topology, recorders::Array{Recorder}) where NODE = Space{NODE}([], [], topology, recorders)
+Space{NODE}(recorders::Recorders) where NODE = Space{NODE}([], [], recorders)
 
 mutable struct Node
-    index::Int32
-    coordinates::Point
+    index::Int64 # TODO: rename to space_index ?
+    coordinates::Point # TODO: rename to topology_index ?
     _new_node::Union{Nothing, Node}
     space::Union{Nothing, Space}
 
@@ -25,7 +23,8 @@ mutable struct Node
     properties::Any
 
     Node(properties::Any) = new(0, Point(0, 0), nothing, nothing, properties)
-    function Node(index::Int32, coordinates::Point, _new_node::Union{Nothing, Node}, space::Union{Nothing, Space}, properties::Any)
+
+    function Node(index::Int64, coordinates::Point, _new_node::Union{Nothing, Node}, space::Union{Nothing, Space}, properties::Any)
         return new(index, coordinates, _new_node, space, properties)
     end
 end
@@ -46,6 +45,16 @@ function Base.deepcopy(node::Node)
 end
 
 
+function register!(space::Space{Node}, node::Node)
+    node.space = space
+    node.index = length(space._base_nodes) + 1
+
+    # TODO: reserve memory for _base_nodes and _new_node
+    push!(space._base_nodes, node)
+    push!(space._new_nodes, nothing)
+end
+
+
 Base.length(space::Space{Node}) = length(space._base_nodes)
 
 
@@ -56,15 +65,17 @@ function record_state(space::Space{Node})
 end
 
 
-function turn(callback::Any, space::Space{Node})
+function apply_changes(space::Space{Node})
 
-    callback(space)
+    # TODO: rewrite from coping single nodes to memory regions switching
 
     for (i, node) in enumerate(space._new_nodes)
-        if !isnothing(node)
-            space._base_nodes[i] = node
-            space._new_nodes[i] = nothing
+        if isnothing(node)
+            continue
         end
+
+        space._base_nodes[i] = node
+        space._new_nodes[i] = nothing
     end
 
     record_state(space)
@@ -82,23 +93,6 @@ function space_size(nodes::Array{Node, 1})
 
     return Size(BoundingBox(coordinates))
 end
-
-
-# TODO: replace Any with appropriate type
-# TODO: does "callback" good solution?
-function base_nodes(callback::Any, space::Space{Node}, filter::Any, indexes::Any)
-    for i in indexes
-        node = space._base_nodes[i]
-
-        if check(node, filter)
-            callback(node)
-        end
-    end
-
-end
-
-
-base_nodes(callback::Any, space::Space{Node}, filter::Any) = base_nodes(callback, space, filter, 1:length(space))
 
 
 function check
