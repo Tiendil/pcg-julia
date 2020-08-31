@@ -5,7 +5,8 @@ using PCG
 using PCG.Geometry
 using PCG.SquareGreed
 using PCG.Topologies
-using PCG.Recorders
+using PCG.Recorders.SquareGreedImage
+using PCG.Recorders.TurnsLogger
 using PCG.Spaces
 
 using PCG.Types
@@ -123,14 +124,16 @@ end
 
 
 ############
-# visualizer
+# recorders
 ############
 
-drawer = Recorder2D(CELL_SIZE, convert(Int32, 100), "./example.webp")
+drawer = SquareGreedImageRecorder(CELL_SIZE, convert(Int32, 100))
 
 add_biome(drawer, Biome(ALIVE, Sprite(RGBA(1, 1, 1), CELL_SIZE)))
 add_biome(drawer, Biome(DEAD, Sprite(RGBA(0, 0, 0), CELL_SIZE)))
 # add_biome(drawer, Biome(All(), Sprite(RGBA(1, 0, 0), CELL_SIZE)))
+
+turns_logger = TurnsLoggerRecorder(0, TURNS + 2)
 
 ###########
 # generator
@@ -138,7 +141,7 @@ add_biome(drawer, Biome(DEAD, Sprite(RGBA(0, 0, 0), CELL_SIZE)))
 
 topology = Topology()
 
-space = Space{Node}([drawer])
+space = Space{Node}([drawer, turns_logger])
 initialize(space, cells_rectangle(WIDTH, HEIGHT))
 
 # TODO: all filters must be updated on topology update
@@ -161,8 +164,6 @@ apply_changes(space)
 
 
 for i in 1:TURNS
-    println("turn $(i+1)/$TURNS")
-
     for node in all()
         if check(node, ALIVE)
             if !(2 <= length(filter(neighbors(node), ALIVE)) <= 3)

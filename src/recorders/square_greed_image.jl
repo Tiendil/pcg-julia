@@ -1,13 +1,13 @@
-module Recorders
+module SquareGreedImage
 
 using Images, Reel
 
-using ..PCG.Geometry: Size, Point
-using ..PCG.Types: Recorder
-using ..PCG.Spaces
+using ...PCG.Geometry: Size, Point
+using ...PCG.Types: Recorder
+using ...PCG.Spaces
 
 
-export Sprite, Biome, Recorder2D, add_biome, save_image
+export Sprite, Biome, SquareGreedImageRecorder, add_biome, save_image
 
 struct Sprite
     color::Any
@@ -24,30 +24,28 @@ struct Biome
 end
 
 
-mutable struct Recorder2D <: Recorder
+mutable struct SquareGreedImageRecorder <: Recorder
     cell_size::Size
     duration::Int32
-    filename::String
 
     _biomes::Array{Biome, 1}
     _frames::Array{Any, 1}
 end
 
 
-Recorder2D(cell_size::Size, duration::Int32, filename::String) = Recorder2D(cell_size,
-                                                                            duration,
-                                                                            filename,
-                                                                            [],
-                                                                            [])
+SquareGreedImageRecorder(cell_size::Size, duration::Int32) = SquareGreedImageRecorder(cell_size,
+                                                                                      duration,
+                                                                                      [],
+                                                                                      [])
 
 
 
-function add_biome(drawer::Recorder2D, biome::Biome)
+function add_biome(drawer::SquareGreedImageRecorder, biome::Biome)
     push!(drawer._biomes, biome)
 end
 
 
-function save_image(drawer::Recorder2D, filename::String)
+function save_image(drawer::SquareGreedImageRecorder, filename::String)
 
     frames = Frames(MIME("image/png"), fps=1.0 / (drawer.duration / 1000))
 
@@ -60,13 +58,13 @@ function save_image(drawer::Recorder2D, filename::String)
 end
 
 
-function node_position(recorder::Recorder2D, node::Node, canvas_size::Size)
+function node_position(recorder::SquareGreedImageRecorder, node::Node, canvas_size::Size)
     # TODO: is it right?
     return (node.coordinates - Point(1.0, 1.0)) * recorder.cell_size
 end
 
 
-function Spaces.record_state(space::Space{Node}, recorder::Recorder2D)
+function Spaces.record_state(space::Space{Node}, recorder::SquareGreedImageRecorder)
 
     canvas_size = ceil(space_size(space._base_nodes) * recorder.cell_size)
 
@@ -99,7 +97,7 @@ function Spaces.record_state(space::Space{Node}, recorder::Recorder2D)
 end
 
 
-function choose_biome(drawer::Recorder2D, node::Node)
+function choose_biome(drawer::SquareGreedImageRecorder, node::Node)
     for biome in drawer._biomes
         if check(node, biome.checker)
             return biome

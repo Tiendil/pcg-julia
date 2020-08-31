@@ -15,7 +15,7 @@ import .Topologies
 include("square_greed.jl")
 import .SquareGreed
 
-include("recorders.jl")
+include("recorders/Recorders.jl")
 import .Recorders
 
 end
