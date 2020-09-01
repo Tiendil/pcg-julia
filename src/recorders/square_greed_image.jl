@@ -64,7 +64,7 @@ function node_position(recorder::SquareGreedImageRecorder, node::Node, canvas_si
 end
 
 
-function Spaces.record_state(space::Space{Node}, recorder::SquareGreedImageRecorder)
+function Spaces.record_state(space::Space, recorder::SquareGreedImageRecorder)
 
     canvas_size = ceil(space_size(space._base_nodes) * recorder.cell_size)
 

@@ -151,32 +151,32 @@ function (state::State)(nodes::AreaNodes)
 end
 
 
-mutable struct NodeProperties
+mutable struct Properties <: NodeProperties
     state::State
 end
 
 
 # TODO: replace with more abstract logic
-function change_state(node::Node, state::State)
+function change_state(space::Space, node::Node, state::State)
     if !node.updated
         node.updated = true
-        node.space._new_nodes[node.index] = deepcopy(node)
+        space._new_nodes[node.index] = deepcopy(node)
     end
 
-    node.space._new_nodes[node.index].properties.state = state
+    space._new_nodes[node.index].properties.state = state
 end
 
 
-Base.zero(::Type{NodeProperties}) = NodeProperties(DEAD)
+Base.zero(::Type{Properties}) = Properties(DEAD)
 
 
 # TODO: what convention for name of that method in julia?
 # TODO: rewrite to call(a, b, c) do … end syntax ? where … is node fabric
-function initialize(space::Space{Node}, coordinates::SquareCells)
+function initialize(space::Space{Node{Properties}}, coordinates::SquareCells)
 
     for cell in coordinates
-        node = Node()
-        node.properties = NodeProperties(DEAD)
+        node = Node(Properties(DEAD))
+
         node.coordinates = Point(cell)
 
         # TODO: remove ambiguous name register! ??
@@ -218,9 +218,9 @@ turns_logger = TurnsLoggerRecorder(0, TURNS + 2)
 topology = Topology()
 
 if DEBUG
-    space = Space{Node}()
+    space = Space{Node{Properties}}()
 else
-    space = Space{Node}([drawer, turns_logger])
+    space = Space{Node{Properties}}([drawer, turns_logger])
 end
 
 initialize(space, cells_rectangle(WIDTH, HEIGHT))
@@ -237,7 +237,7 @@ neighbors = Neighbors(topology)
 for node in all()
     # TODO: construct Fraction(0.2) only once
     if node |> Fraction(0.2)
-        change_state(node, ALIVE)  # TODO: rewrite for macros or smth else
+        change_state(space, node, ALIVE)  # TODO: rewrite for macros or smth else
     end
 end
 
@@ -248,12 +248,12 @@ apply_changes(space)
     for node in all()
         if (node |> ALIVE &&
             node |> neighbors |> ALIVE |> count ∉ 2:3)
-            change_state(node, DEAD)
+            change_state(space, node, DEAD)
         end
 
         if (node |> DEAD &&
             node |> neighbors |> ALIVE |> count == 3)
-            change_state(node, ALIVE)
+            change_state(space, node, ALIVE)
         end
 
         # TODO: hide in api
