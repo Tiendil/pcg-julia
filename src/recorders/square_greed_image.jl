@@ -85,6 +85,7 @@ function Spaces.record_state(space::Space{Node}, recorder::SquareGreedImageRecor
         y = Int64(position.y) + 1
 
         # TODO: round position correctly
+        # TODO: replace with coping to slice
         copyto!(canvas,
                 # TODO: does indexes places right?
                 # TODO: fix size calculation

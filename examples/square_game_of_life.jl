@@ -11,19 +11,6 @@ using PCG.Spaces
 
 using PCG.Types
 
-############################################
-# temporary code
-############################################
-
-# TODO: remove
-const CELL_SIZE = Size(5, 5)
-
-
-struct Fraction
-    border::Float32
-end
-
-
 #########################
 # ? filters
 #########################
@@ -50,10 +37,39 @@ struct Neighbors
 end
 
 
+const AreaNodes = Array{Union{Node, Nothing}, 1}
+
+
+function Base.count(nodes::AreaNodes)
+    counter = 0
+
+    for node in nodes
+        if !isnothing(node)
+            counter += 1
+        end
+    end
+
+    return counter
+end
+
+
 function (connectome::Neighbors)(node::Node)
-    return [space._base_nodes[index]
-            for index in connectome.indexes[node.index]
-            if node.index != index]
+    indexes = connectome.indexes[node.index]
+    nodes = AreaNodes(undef, length(indexes))
+
+    nodes .= getindex.((space._base_nodes,), indexes)
+
+    return nodes
+end
+
+
+struct Fraction
+    border::Float32
+end
+
+
+function (fraction::Fraction)(node::Node)
+    return check(node, fraction)
 end
 
 
@@ -62,11 +78,27 @@ end
 const TURNS = 100
 const WIDTH = 80
 const HEIGHT = 80
-
+const CELL_SIZE = Size(5, 5)
+const DEBUG = true
 
 @enum State begin
     DEAD
     ALIVE
+end
+
+
+function (state::State)(node::Node)
+    return check(node, state)
+end
+
+function (state::State)(nodes::AreaNodes)
+    for (i, node) in enumerate(nodes)
+        if !isnothing(node) && check(node, state)
+            nodes[i] = nothing
+        end
+    end
+
+    return nodes
 end
 
 
@@ -118,10 +150,6 @@ function Spaces.check(node::Node, parameters::State)
     return node.properties.state == parameters
 end
 
-function filter(nodes::Array{Node, 1}, parameters::State)
-    return [node for node in nodes if check(node, parameters)]
-end
-
 
 ############
 # recorders
@@ -141,10 +169,15 @@ turns_logger = TurnsLoggerRecorder(0, TURNS + 2)
 
 topology = Topology()
 
-space = Space{Node}([drawer, turns_logger])
+if DEBUG
+    space = Space{Node}()
+else
+    space = Space{Node}([drawer, turns_logger])
+end
+
 initialize(space, cells_rectangle(WIDTH, HEIGHT))
 
-# TODO: all filters must be updated on topology update
+# todo: all filters must be updated on topology update
 #       better to check topology version on each filter call?
 all = All(space)
 neighbors = Neighbors(topology)
@@ -155,26 +188,24 @@ neighbors = Neighbors(topology)
 
 for node in all()
     # TODO: construct Fraction(0.2) only once
-    if check(node, Fraction(0.2))
-        node.properties.state = ALIVE  # TODO: rewrite for macros or smth else
+    if node |> Fraction(0.2)
+        change_state(node, ALIVE)  # TODO: rewrite for macros or smth else
     end
 end
 
 apply_changes(space)
 
 
-for i in 1:TURNS
+@time for i in 1:TURNS
     for node in all()
-        if check(node, ALIVE)
-            if !(2 <= length(filter(neighbors(node), ALIVE)) <= 3)
-                change_state(node, DEAD)
-            end
+        if (node |> ALIVE &&
+            node |> neighbors |> ALIVE |> count ∉ 2:3)
+            change_state(node, DEAD)
         end
 
-        if check(node, DEAD)
-            if length(filter(neighbors(node), ALIVE)) == 3
-                change_state(node, ALIVE)
-            end
+        if (node |> DEAD &&
+            node |> neighbors |> ALIVE |> count == 3)
+            change_state(node, ALIVE)
         end
     end
 
@@ -182,6 +213,9 @@ for i in 1:TURNS
 
 end
 
-save_image(drawer, "output.webm")
+
+if !DEBUG
+    save_image(drawer, "output.webm")
+end
 
 print("\n\nprocessed\n")

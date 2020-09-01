@@ -1,6 +1,6 @@
 module Types
 
-export Recorder
+export Recorder, Recorders
 
 
 abstract type Recorder end

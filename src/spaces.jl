@@ -3,15 +3,16 @@ module Spaces
 using ..PCG.Geometry: Point, BoundingBox, Size
 using ..PCG.Types: Recorder, Recorders
 
-export Space, Node, record_state, turn, space_size, check, register!, apply_changes
+export Space, Node, Nodes, record_state, turn, space_size, check, register!, apply_changes
 
 mutable struct Space{NODE}
-    _base_nodes::Array{NODE}
+    _base_nodes::Array{NODE, 1}
     _new_nodes::Array{Union{Nothing, NODE}}
     _recorders::Recorders
 end
 
 Space{NODE}(recorders::Recorders) where NODE = Space{NODE}([], [], recorders)
+Space{NODE}() where NODE = Space{NODE}([], [], Array{Recorder, 1}())
 
 mutable struct Node
     index::Int64 # TODO: rename to space_index ?
@@ -30,6 +31,8 @@ mutable struct Node
 end
 
 Node() = Node(nothing)
+
+const Nodes = Array{Node, 1}
 
 # TODO: is it right?
 Base.zero(::Type{Node}) = Node(nothing)
@@ -86,7 +89,7 @@ function space_size(nodes::Array{Node, 1})
 
     # TODO: rewrite to redefiend function?
     if isempty(nodes)
-        return BoundingBox()
+        return Size(BoundingBox())
     end
 
     coordinates = [node.coordinates for node in nodes]
