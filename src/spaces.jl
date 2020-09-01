@@ -17,16 +17,16 @@ Space{NODE}() where NODE = Space{NODE}([], [], Array{Recorder, 1}())
 mutable struct Node
     index::Int64 # TODO: rename to space_index ?
     coordinates::Point # TODO: rename to topology_index ?
-    _new_node::Union{Nothing, Node}
+    updated::Bool
     space::Union{Nothing, Space}
 
     # TODO: replace Any with template parameter declaration
     properties::Any
 
-    Node(properties::Any) = new(0, Point(0, 0), nothing, nothing, properties)
+    Node(properties::Any) = new(0, Point(0, 0), false, nothing, properties)
 
-    function Node(index::Int64, coordinates::Point, _new_node::Union{Nothing, Node}, space::Union{Nothing, Space}, properties::Any)
-        return new(index, coordinates, _new_node, space, properties)
+    function Node(index::Int64, coordinates::Point, updated::Bool, space::Union{Nothing, Space}, properties::Any)
+        return new(index, coordinates, updated, space, properties)
     end
 end
 
@@ -42,7 +42,7 @@ Base.zero(::Type{Node}) = Node(nothing)
 function Base.deepcopy(node::Node)
     return Node(node.index,
                 node.coordinates,
-                deepcopy(node._new_node),
+                false,
                 node.space,
                 deepcopy(node.properties))
 end

@@ -25,23 +25,70 @@ function (all::All)()
 end
 
 
+const AreaNodes = Array{Union{Node, Nothing}, 1}
+
+mutable struct AreaNodesElement
+    used::Bool
+    area::AreaNodes
+end
+
+
+mutable struct AreaNodesCache
+    areas::Array{AreaNodesElement, 1}
+
+    AreaNodesCache() = new(Array{AreaNodesElement, 1}())
+end
+
+
+function reserve_area!(cache::AreaNodesCache, size::Int64)
+    for element in cache.areas
+        if !element.used && length(element.area) == size
+            element.used = true
+            return element.area
+        end
+    end
+
+    area = AreaNodes(undef, size)
+    push!(cache.areas, AreaNodesElement(true, area))
+
+    return area
+end
+
+
+function release_area!(cache::AreaNodesCache, area::AreaNodes)
+    for element in cache.areas
+        if element.area === area
+            element.used = false
+            return
+        end
+    end
+end
+
+
+function release_all_areas!(cache::AreaNodesCache)
+    for element in cache.areas
+        element.used = false
+    end
+end
+
+
 struct Neighbors
     indexes::Any
+    cache::AreaNodesCache
 
     function Neighbors(topology::Topology)
         template = square_area_template(1, 1)
         indexes = area(topology, template)
-        return new(indexes)
+        return new(indexes, AreaNodesCache())
     end
 
 end
 
 
-const AreaNodes = Array{Union{Node, Nothing}, 1}
-
-
 function Base.count(nodes::AreaNodes)
     counter = 0
+
+    # println([isnothing(node) ? '?' : node.properties.state for node in nodes])
 
     for node in nodes
         if !isnothing(node)
@@ -55,7 +102,7 @@ end
 
 function (connectome::Neighbors)(node::Node)
     indexes = connectome.indexes[node.index]
-    nodes = AreaNodes(undef, length(indexes))
+    nodes = reserve_area!(connectome.cache, length(indexes))
 
     nodes .= getindex.((space._base_nodes,), indexes)
 
@@ -93,9 +140,11 @@ end
 
 function (state::State)(nodes::AreaNodes)
     for (i, node) in enumerate(nodes)
-        if !isnothing(node) && check(node, state)
-            nodes[i] = nothing
+        if isnothing(node) | check(node, state)
+            continue
         end
+
+        nodes[i] = nothing
     end
 
     return nodes
@@ -109,13 +158,12 @@ end
 
 # TODO: replace with more abstract logic
 function change_state(node::Node, state::State)
-    if isnothing(node._new_node)
-        # TODO: does two instances required?
-        node._new_node = deepcopy(node)
-        node.space._new_nodes[node.index] = node._new_node
+    if !node.updated
+        node.updated = true
+        node.space._new_nodes[node.index] = deepcopy(node)
     end
 
-    node._new_node.properties.state = state
+    node.space._new_nodes[node.index].properties.state = state
 end
 
 
@@ -207,6 +255,9 @@ apply_changes(space)
             node |> neighbors |> ALIVE |> count == 3)
             change_state(node, ALIVE)
         end
+
+        # TODO: hide in api
+        release_all_areas!(neighbors.cache)
     end
 
     apply_changes(space)
@@ -218,4 +269,6 @@ if !DEBUG
     save_image(drawer, "output.webm")
 end
 
-print("\n\nprocessed\n")
+println("cached: $(length(neighbors.cache.areas))")
+
+println("processed")
