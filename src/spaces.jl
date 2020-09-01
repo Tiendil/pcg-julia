@@ -8,11 +8,11 @@ export Space, Node, Nodes, record_state, turn, space_size, check, register!, app
 mutable struct Node{P<:NodeProperties}
     index::Int64 # TODO: rename to space_index ?
     coordinates::Point # TODO: rename to topology_index ?
-    updated::Bool
+    index_in_new::Int64
     properties::P
 end
 
-Node(properties::P) where P = Node(0, Point(0, 0), false, properties)
+Node(properties::P) where P = Node(0, Point(0, 0), 0, properties)
 
 const Nodes = Array{<:Node, 1}
 
@@ -24,14 +24,14 @@ Base.zero(::Type{Node}) = Node(nothing)
 function Base.deepcopy(node::Node)
     return Node(node.index,
                 node.coordinates,
-                false,
+                0,
                 deepcopy(node.properties))
 end
 
 
 mutable struct Space{NODE <: Node}
     _base_nodes::Array{NODE, 1}
-    _new_nodes::Array{Union{Nothing, NODE}}
+    _new_nodes::Array{NODE, 1}
     _recorders::Recorders
 end
 
@@ -44,7 +44,6 @@ function register!(space::Space, node::Node)
 
     # TODO: reserve memory for _base_nodes and _new_node
     push!(space._base_nodes, node)
-    push!(space._new_nodes, nothing)
 end
 
 
@@ -62,14 +61,11 @@ function apply_changes(space::Space)
 
     # TODO: rewrite from coping single nodes to memory regions switching
 
-    for (i, node) in enumerate(space._new_nodes)
-        if isnothing(node)
-            continue
-        end
-
-        space._base_nodes[i] = node
-        space._new_nodes[i] = nothing
+    for node in space._new_nodes
+        space._base_nodes[node.index] = node
     end
+
+    resize!(space._new_nodes, 0)
 
     record_state(space)
 end

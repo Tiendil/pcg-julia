@@ -158,12 +158,12 @@ end
 
 # TODO: replace with more abstract logic
 function change_state(space::Space, node::Node, state::State)
-    if !node.updated
-        node.updated = true
-        space._new_nodes[node.index] = deepcopy(node)
+    if node.index_in_new == 0
+        push!(space._new_nodes, deepcopy(node))
+        node.index_in_new = length(space._new_nodes)
     end
 
-    space._new_nodes[node.index].properties.state = state
+    space._new_nodes[node.index_in_new].properties.state = state
 end
 
 
