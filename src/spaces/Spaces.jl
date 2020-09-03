@@ -105,14 +105,15 @@ end
 
 function Spaces.set_node!(space::LinearSpace, i::LinearSpaceIndex, node::SpaceNode)
     space.nodes[i.i] = node
+    push!(space.new_nodes, i)
 end
 
 
 function Spaces.apply_changes!(space::LinearSpace, topology::Topology)
 
     for i in space.new_nodes
-        if space.nodes[i].changed_at == space.turn
-            space.nodes[i] = Node(node.new, node.turn)
+        if space.nodes[i.i].changed_at == space.turn
+            space.nodes[i.i] = SpaceNode(space.nodes[i.i].new, space.turn)
         end
     end
 
