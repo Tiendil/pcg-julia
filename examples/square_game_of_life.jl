@@ -3,13 +3,46 @@ using Images
 
 using PCG
 using PCG.Geometry
-using PCG.SquareGreed
+# using PCG.SquareGreed
 using PCG.Topologies
-using PCG.Recorders.SquareGreedImage
+using PCG.Topologies.SquareGreedTopologies
+# using PCG.Recorders.SquareGreedImage
 using PCG.Recorders.TurnsLogger
 using PCG.Spaces
+using PCG.Spaces.LinearSpaces
 
 using PCG.Types
+
+
+##########################
+# code for intergration
+##########################
+
+
+@enum State begin
+    DEAD
+    ALIVE
+end
+
+
+# TODO: specify parent class
+mutable struct Properties
+    state::State
+end
+
+
+# TODO: does name correct
+# TODO: does topology attribute requred (SquareGreedIndex should contain all required information)
+function to_index(topology::Topology, i::SquareGreedIndex)
+    return LinearSpaceIndex((i.y - 1) * topology.height + i.x)
+end
+
+
+struct Element
+    topology_index::SquareGreedIndex
+    space_index::LinearSpaceIndex
+    node::SpaceNode{Properties}
+end
 
 #########################
 # ? filters
@@ -17,78 +50,35 @@ using PCG.Types
 
 struct All
     space::Space
+    topology::Topology
 end
 
 
 function (all::All)()
-    return all.space._base_nodes
-end
-
-
-const AreaNodes = Array{Union{Node, Nothing}, 1}
-
-mutable struct AreaNodesElement
-    used::Bool
-    area::AreaNodes
-end
-
-
-mutable struct AreaNodesCache
-    areas::Array{AreaNodesElement, 1}
-
-    AreaNodesCache() = new(Array{AreaNodesElement, 1}())
-end
-
-
-function reserve_area!(cache::AreaNodesCache, size::Int64)
-    for element in cache.areas
-        if !element.used && length(element.area) == size
-            element.used = true
-            return element.area
-        end
-    end
-
-    area = AreaNodes(undef, size)
-    push!(cache.areas, AreaNodesElement(true, area))
-
-    return area
-end
-
-
-function release_area!(cache::AreaNodesCache, area::AreaNodes)
-    for element in cache.areas
-        if element.area === area
-            element.used = false
-            return
-        end
-    end
-end
-
-
-function release_all_areas!(cache::AreaNodesCache)
-    for element in cache.areas
-        element.used = false
-    end
+    return (Element(i, to_index(all.topology, i), get_node(all.space, to_index(all.topology, i)))
+            for i in nodes_coordinates(all.topology))
 end
 
 
 struct Neighbors
-    indexes::Any
-    cache::AreaNodesCache
+    space::Space
+    topology::Topology
+    template::Any
 
-    function Neighbors(topology::Topology)
+    function Neighbors(space::Space, topology::Topology)
         template = square_area_template(1, 1)
-        indexes = area(topology, template)
-        return new(indexes, AreaNodesCache())
+        return new(space, topology, template)
     end
 
 end
 
 
-function Base.count(nodes::AreaNodes)
-    counter = 0
+const AreaElements = Vector{Union{Element, Nothing}}
 
-    # println([isnothing(node) ? '?' : node.properties.state for node in nodes])
+
+# TODO: here must be a generator?
+function Base.count(nodes::AreaElements)
+    counter = 0
 
     for node in nodes
         if !isnothing(node)
@@ -100,13 +90,24 @@ function Base.count(nodes::AreaNodes)
 end
 
 
-function (connectome::Neighbors)(node::Node)
-    indexes = connectome.indexes[node.index]
-    nodes = reserve_area!(connectome.cache, length(indexes))
+# TODO: rewrite to cache? (again…)
+function (connectome::Neighbors)(element::Element)
+    elements = AreaElements(nothing, length(connectome.template))
 
-    nodes .= getindex.((space._base_nodes,), indexes)
+    for i in eachindex(connectome.template)
+        coordinates = element.topology_index + connectome.template[i]
 
-    return nodes
+        # TODO: do thms with that
+        if is_valid(topology, coordinates)
+            space_index = to_index(connectome.topology, coordinates)
+
+            elements[i] = Element(coordinates,
+                                  space_index,
+                                  get_node(connectome.space, space_index))
+        end
+    end
+
+    return elements
 end
 
 
@@ -115,8 +116,8 @@ struct Fraction
 end
 
 
-function (fraction::Fraction)(node::Node)
-    return check(node, fraction)
+function (fraction::Fraction)(element::Element)
+    return check(element.node, fraction)
 end
 
 
@@ -128,74 +129,46 @@ const HEIGHT = 80
 const CELL_SIZE = Size(5, 5)
 const DEBUG = true
 
-@enum State begin
-    DEAD
-    ALIVE
+
+function (state::State)(element::Element)
+    return check(element.node, state)
 end
 
+function (state::State)(elements::AreaElements)
+    # TODO: replace with boolean template assigment
 
-function (state::State)(node::Node)
-    return check(node, state)
-end
-
-function (state::State)(nodes::AreaNodes)
-    for (i, node) in enumerate(nodes)
-        if isnothing(node) | check(node, state)
+    for (i, element) in enumerate(elements)
+        if isnothing(element) || check(element.node, state)
             continue
         end
 
-        nodes[i] = nothing
+        elements[i] = nothing
     end
 
-    return nodes
-end
-
-
-mutable struct Properties <: NodeProperties
-    state::State
+    return elements
 end
 
 
 # TODO: replace with more abstract logic
-function change_state(space::Space, node::Node, state::State)
-    if node.index_in_new == 0
-        push!(space._new_nodes, deepcopy(node))
-        node.index_in_new = length(space._new_nodes)
-    end
+function change_state(space::Space, element::Element, state::State)
+    new_node = SpaceNode(element.node.current,
+                         Properties(state),
+                         space.turn)
 
-    space._new_nodes[node.index_in_new].properties.state = state
-end
-
-
-Base.zero(::Type{Properties}) = Properties(DEAD)
-
-
-# TODO: what convention for name of that method in julia?
-# TODO: rewrite to call(a, b, c) do … end syntax ? where … is node fabric
-function initialize(space::Space{Node{Properties}}, coordinates::SquareCells)
-
-    for cell in coordinates
-        node = Node(Properties(DEAD))
-
-        node.coordinates = Point(cell)
-
-        # TODO: remove ambiguous name register! ??
-        Spaces.register!(space, node)
-        Topologies.register!(topology, node.coordinates, node.index)
-    end
-
-    record_state(space)
+    set_node!(space, element.space_index, new_node)
 end
 
 
 # TODO: choose better name?
-function Spaces.check(node::Node, parameters::Fraction)
+# TODO: specify inheritance?
+function Spaces.check(node::SpaceNode, parameters::Fraction)
     return rand(Float32) < parameters.border
 end
 
 
-function Spaces.check(node::Node, parameters::State)
-    return node.properties.state == parameters
+# TODO: specify inheritance?
+function Spaces.check(node::SpaceNode, parameters::State)
+    return node.current.state == parameters
 end
 
 
@@ -203,10 +176,10 @@ end
 # recorders
 ############
 
-drawer = SquareGreedImageRecorder(CELL_SIZE, convert(Int32, 100))
+# drawer = SquareGreedImageRecorder(CELL_SIZE, convert(Int32, 100))
 
-add_biome(drawer, Biome(ALIVE, Sprite(RGBA(1, 1, 1), CELL_SIZE)))
-add_biome(drawer, Biome(DEAD, Sprite(RGBA(0, 0, 0), CELL_SIZE)))
+# add_biome(drawer, Biome(ALIVE, Sprite(RGBA(1, 1, 1), CELL_SIZE)))
+# add_biome(drawer, Biome(DEAD, Sprite(RGBA(0, 0, 0), CELL_SIZE)))
 # add_biome(drawer, Biome(All(), Sprite(RGBA(1, 0, 0), CELL_SIZE)))
 
 turns_logger = TurnsLoggerRecorder(0, TURNS + 2)
@@ -215,52 +188,57 @@ turns_logger = TurnsLoggerRecorder(0, TURNS + 2)
 # generator
 ###########
 
-topology = Topology()
+topology = SquareGreedTopology(WIDTH, HEIGHT)
+
+base_property = Properties(DEAD)
+space_size = WIDTH * HEIGHT
 
 if DEBUG
-    space = Space{Node{Properties}}()
+    space = LinearSpace(base_property, space_size)
 else
-    space = Space{Node{Properties}}([drawer, turns_logger])
+    space = LinearSpace{Properties}(base_property,
+                                    space_size,
+                                    [turns_logger])
+                                    # [drawer, turns_logger])
 end
 
-initialize(space, cells_rectangle(WIDTH, HEIGHT))
+# initialize(space, cells_rectangle(WIDTH, HEIGHT))
 
 # todo: all filters must be updated on topology update
 #       better to check topology version on each filter call?
-all = All(space)
-neighbors = Neighbors(topology)
+all = All(space, topology)
+neighbors = Neighbors(space, topology)
 
 ##########
 # generate
 ##########
 
-for node in all()
+for element in all()
     # TODO: construct Fraction(0.2) only once
-    if node |> Fraction(0.2)
-        change_state(space, node, ALIVE)  # TODO: rewrite for macros or smth else
+    # TODO: move Fraction up
+    if element |> Fraction(0.2)
+        change_state(space, element, ALIVE)  # TODO: rewrite for macros or smth else
     end
 end
 
-apply_changes(space)
+apply_changes!(space)
 
 
 @time for i in 1:TURNS
-    for node in all()
-        if (node |> ALIVE &&
-            node |> neighbors |> ALIVE |> count ∉ 2:3)
-            change_state(space, node, DEAD)
+    for element in all()
+
+        if (element |> ALIVE &&
+            element |> neighbors |> ALIVE |> count ∉ 2:3)
+            change_state(space, element, DEAD)
         end
 
-        if (node |> DEAD &&
-            node |> neighbors |> ALIVE |> count == 3)
-            change_state(space, node, ALIVE)
+        if (element |> DEAD &&
+            element |> neighbors |> ALIVE |> count == 3)
+            change_state(space, element, ALIVE)
         end
-
-        # TODO: hide in api
-        release_all_areas!(neighbors.cache)
     end
 
-    apply_changes(space)
+    apply_changes!(space)
 
 end
 
@@ -268,7 +246,5 @@ end
 if !DEBUG
     save_image(drawer, "output.webm")
 end
-
-println("cached: $(length(neighbors.cache.areas))")
 
 println("processed")

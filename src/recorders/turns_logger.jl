@@ -17,7 +17,7 @@ mutable struct TurnsLoggerRecorder <: Recorder
 end
 
 
-function Spaces.record_state(space::Space, recorder::TurnsLoggerRecorder)
+function Spaces.record_state!(space::Space, recorder::TurnsLoggerRecorder)
     recorder.turn_number += 1
 
     if recorder.total_turns == NO_TURNS_LIMIT
