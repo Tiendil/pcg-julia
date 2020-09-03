@@ -1,6 +1,6 @@
 module Spaces
 
-export Space
+using ...PCG.Topologies: Topology
 
 export Space, SpaceIndex, SpaceNode, get_node, check, set_node!, apply_changes!, record_state!, recorders
 
@@ -39,9 +39,9 @@ function apply_changes! end
 function recorders end
 
 
-function record_state!(space::Space)
+function record_state!(space::Space, topology::Topology)
     for recorder in recorders(space)
-        record_state!(space, recorder)
+        record_state!(space, topology, recorder)
     end
 end
 
@@ -49,6 +49,7 @@ end
 
 module LinearSpaces
 
+using ...PCG.Topologies: Topology
 using ...PCG.Spaces
 using ...PCG.Spaces: SpaceIndex, Space, SpaceNodes, SpaceNode, Turn
 using ...PCG.Types: Recorder, Recorders
@@ -89,7 +90,7 @@ end
 
 LinearSpace(base_property::P, size::Int64) where P = LinearSpace(base_property,
                                                                  size,
-                                                                 Vector{Recorder}())
+                                                                 Vector{<:Recorder}())
 
 
 function Spaces.recorders(space::LinearSpace)
@@ -107,7 +108,7 @@ function Spaces.set_node!(space::LinearSpace, i::LinearSpaceIndex, node::SpaceNo
 end
 
 
-function Spaces.apply_changes!(space::LinearSpace)
+function Spaces.apply_changes!(space::LinearSpace, topology::Topology)
 
     for i in space.new_nodes
         if space.nodes[i].changed_at == space.turn
@@ -119,7 +120,7 @@ function Spaces.apply_changes!(space::LinearSpace)
 
     resize!(space.new_nodes, 0)
 
-    record_state!(space)
+    record_state!(space, topology)
 end
 
 

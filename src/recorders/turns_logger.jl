@@ -1,5 +1,6 @@
 module TurnsLogger
 
+using ...PCG.Topologies: Topology
 using ...PCG.Types: Recorder
 using ...PCG.Spaces
 
@@ -17,7 +18,7 @@ mutable struct TurnsLoggerRecorder <: Recorder
 end
 
 
-function Spaces.record_state!(space::Space, recorder::TurnsLoggerRecorder)
+function Spaces.record_state!(space::Space, topology::Topology, recorder::TurnsLoggerRecorder)
     recorder.turn_number += 1
 
     if recorder.total_turns == NO_TURNS_LIMIT

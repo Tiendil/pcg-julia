@@ -6,7 +6,7 @@ using PCG.Geometry
 # using PCG.SquareGreed
 using PCG.Topologies
 using PCG.Topologies.SquareGreedTopologies
-# using PCG.Recorders.SquareGreedImage
+using PCG.Recorders.SquareGreedImage
 using PCG.Recorders.TurnsLogger
 using PCG.Spaces
 using PCG.Spaces.LinearSpaces
@@ -127,7 +127,7 @@ const TURNS = 100
 const WIDTH = 80
 const HEIGHT = 80
 const CELL_SIZE = Size(5, 5)
-const DEBUG = true
+const DEBUG = false
 
 
 function (state::State)(element::Element)
@@ -176,10 +176,10 @@ end
 # recorders
 ############
 
-# drawer = SquareGreedImageRecorder(CELL_SIZE, convert(Int32, 100))
+drawer = SquareGreedImageRecorder(CELL_SIZE, convert(Int32, 100))
 
-# add_biome(drawer, Biome(ALIVE, Sprite(RGBA(1, 1, 1), CELL_SIZE)))
-# add_biome(drawer, Biome(DEAD, Sprite(RGBA(0, 0, 0), CELL_SIZE)))
+add_biome(drawer, Biome(ALIVE, Sprite(RGBA(1, 1, 1), CELL_SIZE)))
+add_biome(drawer, Biome(DEAD, Sprite(RGBA(0, 0, 0), CELL_SIZE)))
 # add_biome(drawer, Biome(All(), Sprite(RGBA(1, 0, 0), CELL_SIZE)))
 
 turns_logger = TurnsLoggerRecorder(0, TURNS + 2)
@@ -196,10 +196,10 @@ space_size = WIDTH * HEIGHT
 if DEBUG
     space = LinearSpace(base_property, space_size)
 else
-    space = LinearSpace{Properties}(base_property,
-                                    space_size,
-                                    [turns_logger])
-                                    # [drawer, turns_logger])
+    space = LinearSpace(base_property,
+                        space_size,
+                        # [turns_logger])
+                        [drawer, turns_logger])
 end
 
 # initialize(space, cells_rectangle(WIDTH, HEIGHT))
@@ -221,7 +221,7 @@ for element in all()
     end
 end
 
-apply_changes!(space)
+apply_changes!(space, topology)
 
 
 @time for i in 1:TURNS
@@ -238,7 +238,7 @@ apply_changes!(space)
         end
     end
 
-    apply_changes!(space)
+    apply_changes!(space, topology)
 
 end
 
