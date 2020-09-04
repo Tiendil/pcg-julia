@@ -3,6 +3,9 @@ module PCG
 include("types.jl")
 import .Types
 
+include("arrays_caches.jl")
+import .ArraysCaches
+
 include("geometry.jl")
 import .Geometry
 

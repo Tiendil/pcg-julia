@@ -3,7 +3,7 @@ using Images
 
 using PCG
 using PCG.Geometry
-# using PCG.SquareGreed
+using PCG.ArraysCaches
 using PCG.Topologies
 using PCG.Topologies.SquareGreedTopologies
 using PCG.Recorders.SquareGreedImage
@@ -31,6 +31,10 @@ struct Properties
 end
 
 
+# TODO: remove?
+# Base.copy(properties::Properties) = Properties(properties.state)
+
+
 # TODO: does name correct
 # TODO: does topology attribute requred (SquareGreedIndex should contain all required information)
 function to_index(topology::SquareGreedTopology, i::SquareGreedIndex)
@@ -56,9 +60,15 @@ end
 
 
 function (all::All)()
-    return (Element(i, to_index(all.topology, i), get_node(all.space, to_index(all.topology, i)))
+    return (Element(i,
+                    to_index(all.topology, i),
+                    get_node(all.space, to_index(all.topology, i)))
             for i in nodes_coordinates(all.topology))
+
 end
+
+
+const AreaElements = Vector{Union{Element, Nothing}}
 
 
 # TODO: can we create universal predicates?
@@ -66,16 +76,20 @@ struct Neighbors{P}
     space::LinearSpace{P}
     topology::SquareGreedTopology
     template::SquareGreedIndexes
+    cache::ArraysCache{AreaElements}
 
     function Neighbors(space::LinearSpace{P}, topology::SquareGreedTopology) where P
         template = square_area_template(1, 1)
-        return new{P}(space, topology, template)
+        cache = ArraysCache{AreaElements}()
+        return new{P}(space, topology, template, cache)
     end
 
 end
 
 
-const AreaElements = Vector{Union{Element, Nothing}}
+function ArraysCaches.release_all!(neighbors::Neighbors{P}) where P
+    release_all!(neighbors.cache)
+end
 
 
 # TODO: here must be a generator?
@@ -94,7 +108,7 @@ end
 
 # TODO: rewrite to cache? (again…)
 function (connectome::Neighbors)(element::Element)
-    elements = AreaElements(nothing, length(connectome.template))
+    elements = reserve!(connectome.cache, length(connectome.template))
 
     for i in eachindex(connectome.template)
         coordinates = element.topology_index + connectome.template[i]
@@ -203,7 +217,6 @@ if DEBUG
 else
     space = LinearSpace(base_property,
                         space_size,
-                        # [turns_logger])
                         [drawer, turns_logger])
 end
 
@@ -243,6 +256,8 @@ apply_changes!(space, topology)
             element |> neighbors |> ALIVE |> count == 3)
             change_state(space, element, ALIVE)
         end
+
+        release_all!(neighbors)
     end
 
     apply_changes!(space, topology)
