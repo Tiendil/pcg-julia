@@ -72,22 +72,22 @@ const AreaElements = Vector{Union{Element, Nothing}}
 
 
 # TODO: can we create universal predicates?
-struct Neighbors{P}
-    space::LinearSpace{P}
+struct Neighbors
+    space::LinearSpace{Properties}
     topology::SquareGreedTopology
     template::SquareGreedIndexes
     cache::ArraysCache{AreaElements}
 
-    function Neighbors(space::LinearSpace{P}, topology::SquareGreedTopology) where P
+    function Neighbors(space::LinearSpace{Properties}, topology::SquareGreedTopology)
         template = square_area_template(1, 1)
         cache = ArraysCache{AreaElements}()
-        return new{P}(space, topology, template, cache)
+        return new(space, topology, template, cache)
     end
 
 end
 
 
-function ArraysCaches.release_all!(neighbors::Neighbors{P}) where P
+function ArraysCaches.release_all!(neighbors::Neighbors)
     release_all!(neighbors.cache)
 end
 
@@ -114,7 +114,7 @@ function (connectome::Neighbors)(element::Element)
         coordinates = element.topology_index + connectome.template[i]
 
         # TODO: do smth with that
-        if is_valid(topology, coordinates)
+        if is_valid(connectome.topology, coordinates)
             space_index = to_index(connectome.topology, coordinates)
 
             elements[i] = Element(coordinates,
@@ -124,6 +124,10 @@ function (connectome::Neighbors)(element::Element)
     end
 
     return elements
+end
+
+
+function neighbors2(connectome::Neighbors, element::Element)
 end
 
 
@@ -190,83 +194,84 @@ function Spaces.check(node::SpaceNode, parameters::State)
 end
 
 
-############
-# recorders
-############
-
-drawer = SquareGreedImageRecorder(CELL_SIZE, convert(Int32, 100))
-
-add_biome(drawer, Biome(ALIVE, Sprite(RGBA(1, 1, 1), CELL_SIZE)))
-add_biome(drawer, Biome(DEAD, Sprite(RGBA(0, 0, 0), CELL_SIZE)))
-# add_biome(drawer, Biome(All(), Sprite(RGBA(1, 0, 0), CELL_SIZE)))
-
-turns_logger = TurnsLoggerRecorder(0, TURNS + 2)
-
-###########
-# generator
-###########
-
-topology = SquareGreedTopology(WIDTH, HEIGHT)
-
-base_property = Properties(DEAD)
-space_size = WIDTH * HEIGHT
-
-
-if DEBUG
-    space = LinearSpace(base_property, space_size)
-else
-    space = LinearSpace(base_property,
-                        space_size,
-                        [drawer, turns_logger])
-end
-
-# initialize(space, cells_rectangle(WIDTH, HEIGHT))
-
-# todo: all filters must be updated on topology update
-#       better to check topology version on each filter call?
-all = All(space, topology)
-neighbors = Neighbors(space, topology)
-
 ##########
 # generate
 ##########
 
-for element in all()
-    # TODO: construct Fraction(0.2) only once
-    # TODO: move Fraction up
-    if element |> Fraction(0.2)
-        change_state(space, element, ALIVE)  # TODO: rewrite for macros or smth else
+function process(turns::Int64, debug::Bool)
+
+    ############
+    # recorders
+    ############
+
+    drawer = SquareGreedImageRecorder(CELL_SIZE, convert(Int32, 100))
+
+    add_biome(drawer, Biome(ALIVE, Sprite(RGBA(1, 1, 1), CELL_SIZE)))
+    add_biome(drawer, Biome(DEAD, Sprite(RGBA(0, 0, 0), CELL_SIZE)))
+    # add_biome(drawer, Biome(All(), Sprite(RGBA(1, 0, 0), CELL_SIZE)))
+
+    turns_logger = TurnsLoggerRecorder(0, TURNS + 2)
+
+    ###########
+    # generator
+    ###########
+
+    topology = SquareGreedTopology(WIDTH, HEIGHT)
+
+    base_property = Properties(DEAD)
+    space_size = WIDTH * HEIGHT
+
+
+    if DEBUG
+        space = LinearSpace(base_property, space_size)
+    else
+        space = LinearSpace(base_property,
+                            space_size,
+                            [drawer, turns_logger])
     end
-end
 
-apply_changes!(space, topology)
+    # todo: all filters must be updated on topology update
+    #       better to check topology version on each filter call?
+    all = All(space, topology)
+    neighbors = Neighbors(space, topology)
 
-
-@time for i in 1:TURNS
     for element in all()
-
-        # @time element |> neighbors |> ALIVE |> count
-
-        if (element |> ALIVE &&
-            element |> neighbors |> ALIVE |> count ∉ 2:3)
-            change_state(space, element, DEAD)
+        # TODO: construct Fraction(0.2) only once
+        # TODO: move Fraction up
+        if element |> Fraction(0.2)
+            change_state(space, element, ALIVE)  # TODO: rewrite for macros or smth else
         end
-
-        if (element |> DEAD &&
-            element |> neighbors |> ALIVE |> count == 3)
-            change_state(space, element, ALIVE)
-        end
-
-        release_all!(neighbors)
     end
 
     apply_changes!(space, topology)
 
+
+    for i in 1:turns
+        for element in all()
+            if (element |> ALIVE &&
+                element |> neighbors |> ALIVE |> count ∉ 2:3)
+                change_state(space, element, DEAD)
+            end
+
+            if (element |> DEAD &&
+                element |> neighbors |> ALIVE |> count == 3)
+                change_state(space, element, ALIVE)
+            end
+
+            release_all!(neighbors)
+        end
+
+        apply_changes!(space, topology)
+
+    end
+
+
+    if !DEBUG
+        save_image(drawer, "output.webm")
+    end
+
+    println("processed")
 end
 
 
-if !DEBUG
-    save_image(drawer, "output.webm")
-end
-
-println("processed")
+@time process(TURNS, DEBUG)
