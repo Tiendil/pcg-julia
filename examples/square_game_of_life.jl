@@ -26,18 +26,19 @@ end
 
 
 # TODO: specify parent class
-mutable struct Properties
+struct Properties
     state::State
 end
 
 
 # TODO: does name correct
 # TODO: does topology attribute requred (SquareGreedIndex should contain all required information)
-function to_index(topology::Topology, i::SquareGreedIndex)
+function to_index(topology::SquareGreedTopology, i::SquareGreedIndex)
     return LinearSpaceIndex((i.y - 1) * topology.height + i.x)
 end
 
 
+# TODO: make template properties
 struct Element
     topology_index::SquareGreedIndex
     space_index::LinearSpaceIndex
@@ -48,9 +49,9 @@ end
 # ? filters
 #########################
 
-struct All
-    space::Space
-    topology::Topology
+struct All{P}
+    space::LinearSpace{P}
+    topology::SquareGreedTopology
 end
 
 
@@ -60,14 +61,15 @@ function (all::All)()
 end
 
 
-struct Neighbors
-    space::Space
-    topology::Topology
-    template::Any
+# TODO: can we create universal predicates?
+struct Neighbors{P}
+    space::LinearSpace{P}
+    topology::SquareGreedTopology
+    template::SquareGreedIndexes
 
-    function Neighbors(space::Space, topology::Topology)
+    function Neighbors(space::LinearSpace{P}, topology::SquareGreedTopology) where P
         template = square_area_template(1, 1)
-        return new(space, topology, template)
+        return new{P}(space, topology, template)
     end
 
 end
@@ -97,7 +99,7 @@ function (connectome::Neighbors)(element::Element)
     for i in eachindex(connectome.template)
         coordinates = element.topology_index + connectome.template[i]
 
-        # TODO: do thms with that
+        # TODO: do smth with that
         if is_valid(topology, coordinates)
             space_index = to_index(connectome.topology, coordinates)
 
@@ -148,6 +150,7 @@ function (state::State)(elements::AreaElements)
     return elements
 end
 
+using InteractiveUtils
 
 # TODO: replace with more abstract logic
 function change_state(space::Space, element::Element, state::State)
@@ -155,6 +158,7 @@ function change_state(space::Space, element::Element, state::State)
                          Properties(state),
                          space.turn)
 
+    # @code_warntype
     set_node!(space, element.space_index, new_node)
 end
 
@@ -193,6 +197,7 @@ topology = SquareGreedTopology(WIDTH, HEIGHT)
 base_property = Properties(DEAD)
 space_size = WIDTH * HEIGHT
 
+
 if DEBUG
     space = LinearSpace(base_property, space_size)
 else
@@ -226,6 +231,8 @@ apply_changes!(space, topology)
 
 @time for i in 1:TURNS
     for element in all()
+
+        # @time element |> neighbors |> ALIVE |> count
 
         if (element |> ALIVE &&
             element |> neighbors |> ALIVE |> count ∉ 2:3)

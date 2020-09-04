@@ -17,7 +17,7 @@ function is_valid end
 
 module SquareGreedTopologies
 
-export SquareGreedIndex, SquareGreedTopology, square_area_template
+export SquareGreedIndex, SquareGreedTopology, square_area_template, SquareGreedIndexes
 
 using ...PCG.Geometry: Point
 using ...PCG.Topologies

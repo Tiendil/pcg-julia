@@ -66,7 +66,7 @@ const LinearSpaceIndexes = Vector{LinearSpaceIndex}
 
 
 mutable struct LinearSpace{P} <: Space
-    nodes::SpaceNodes
+    nodes::SpaceNodes{P}
     new_nodes::LinearSpaceIndexes
 
     turn::Turn
@@ -104,8 +104,13 @@ end
 
 
 function Spaces.set_node!(space::LinearSpace, i::LinearSpaceIndex, node::SpaceNode)
+    # println("----------")
+    # @time space.nodes
+    # @time i.i
+    # @time space.nodes[i.i]
     space.nodes[i.i] = node
     push!(space.new_nodes, i)
+    return
 end
 
 
