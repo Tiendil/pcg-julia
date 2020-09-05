@@ -33,16 +33,16 @@ struct Properties
 end
 
 
-# TODO: remove?
-# Base.copy(properties::Properties) = Properties(properties.state)
-
-
 # TODO: does name correct
 # TODO: does topology attribute requred (SquareGreedIndex should contain all required information)
 function to_index(topology::SquareGreedTopology, i::SquareGreedIndex)
     return LinearSpaceIndex((i.y - 1) * topology.height + i.x)
 end
 
+
+#########################
+# ? filters
+#########################
 
 # TODO: make template properties
 struct Element
@@ -51,22 +51,27 @@ struct Element
     node::SpaceNode{Properties}
 end
 
-#########################
-# ? filters
-#########################
 
-struct All{P}
-    space::LinearSpace{P}
+function Element(space::LinearSpace{Properties}, topology::SquareGreedTopology, i::SquareGreedIndex)
+    space_index = to_index(topology, i)
+    node = get_node(space, to_index(topology, i))
+    return Element(i, space_index, node)
+end
+
+
+struct All
+    space::LinearSpace{Properties}
     topology::SquareGreedTopology
 end
 
 
-function (all::All)()
-    return (Element(i,
-                    to_index(all.topology, i),
-                    get_node(all.space, to_index(all.topology, i)))
-            for i in nodes_coordinates(all.topology))
+function (all::All)(callback::Function)
+    for i in nodes_coordinates(all.topology)
+        element = Element(all.space, all.topology, i)
+        callback(element)
+    end
 
+    apply_changes!(all.space, all.topology)
 end
 
 
@@ -95,11 +100,11 @@ end
 
 
 # TODO: here must be a generator?
-function Base.count(nodes::AreaElements)
+function Base.count(elements::AreaElements)
     counter = 0
 
-    for node in nodes
-        if !isnothing(node)
+    for element in elements
+        if !isnothing(element)
             counter += 1
         end
     end
@@ -109,27 +114,21 @@ end
 
 
 # TODO: rewrite to cache? (again…)
-function (connectome::Neighbors)(element::Element)
-    elements = reserve!(connectome.cache, length(connectome.template))
+function (neighbors::Neighbors)(element::Element)
+    elements = reserve!(neighbors.cache, length(neighbors.template))
 
-    for i in eachindex(connectome.template)
-        coordinates = element.topology_index + connectome.template[i]
+    for (i, delta) in enumerate(neighbors.template)
+        coordinates = element.topology_index + delta
 
         # TODO: do smth with that
-        if is_valid(connectome.topology, coordinates)
-            space_index = to_index(connectome.topology, coordinates)
-
-            elements[i] = Element(coordinates,
-                                  space_index,
-                                  get_node(connectome.space, space_index))
+        if is_valid(neighbors.topology, coordinates)
+            elements[i] = Element(neighbors.space,
+                                  neighbors.topology,
+                                  coordinates)
         end
     end
 
     return elements
-end
-
-
-function neighbors2(connectome::Neighbors, element::Element)
 end
 
 
@@ -139,7 +138,24 @@ end
 
 
 function (fraction::Fraction)(element::Element)
-    return check(element.node, fraction)
+    return check(element, fraction)
+end
+
+
+function (state::State)(element::Element)
+    return check(element, state)
+end
+
+function (state::State)(elements::AreaElements)
+    # TODO: replace with boolean template assigment
+
+    for (i, e) in enumerate(elements)
+        if !isnothing(e) && !check(e, state)
+            elements[i] = nothing
+        end
+    end
+
+    return elements
 end
 
 
@@ -149,49 +165,32 @@ const TURNS = 100
 const WIDTH = 80
 const HEIGHT = 80
 const CELL_SIZE = Size(5, 5)
-const DEBUG = false
-
-
-function (state::State)(element::Element)
-    return check(element.node, state)
-end
-
-function (state::State)(elements::AreaElements)
-    # TODO: replace with boolean template assigment
-
-    for (i, element) in enumerate(elements)
-        if isnothing(element) || check(element.node, state)
-            continue
-        end
-
-        elements[i] = nothing
-    end
-
-    return elements
-end
+const DEBUG = true
 
 
 # TODO: replace with more abstract logic
-function change_state(space::Space, element::Element, state::State)
+function change_state!(space::Space, element::Element, state::State)::Nothing
     new_node = SpaceNode(element.node.current,
                          Properties(state),
                          space.turn)
 
     # @code_warntype
     set_node!(space, element.space_index, new_node)
+
+    return
 end
 
 
 # TODO: choose better name?
 # TODO: specify inheritance?
-function Spaces.check(node::SpaceNode, parameters::Fraction)
+function Spaces.check(element::Element, parameters::Fraction)
     return rand(Float32) < parameters.border
 end
 
 
 # TODO: specify inheritance?
-function Spaces.check(node::SpaceNode, parameters::State)
-    return node.current.state == parameters
+function Spaces.check(element::Element, parameters::State)
+    return element.node.current.state == parameters
 end
 
 
@@ -213,6 +212,12 @@ function process(turns::Int64, debug::Bool)
 
     turns_logger = TurnsLoggerRecorder(0, TURNS + 2)
 
+    if debug
+        recorders = Recorder[]
+    else
+        recorders = [drawer, turns_logger]
+    end
+
     ###########
     # generator
     ###########
@@ -222,52 +227,41 @@ function process(turns::Int64, debug::Bool)
     base_property = Properties(DEAD)
     space_size = WIDTH * HEIGHT
 
-
-    if DEBUG
-        space = LinearSpace(base_property, space_size)
-    else
-        space = LinearSpace(base_property,
-                            space_size,
-                            [drawer, turns_logger])
-    end
+    space = LinearSpace(base_property, space_size, recorders)
 
     # todo: all filters must be updated on topology update
     #       better to check topology version on each filter call?
     all = All(space, topology)
     neighbors = Neighbors(space, topology)
 
-    for element in all()
+    all() do element
         # TODO: construct Fraction(0.2) only once
         # TODO: move Fraction up
         if element |> Fraction(0.2)
-            change_state(space, element, ALIVE)  # TODO: rewrite for macros or smth else
+            change_state!(space, element, ALIVE)  # TODO: rewrite for macros or smth else
         end
     end
 
-    apply_changes!(space, topology)
-
-
     for i in 1:turns
-        for element in all()
+        all() do element
+
             if (element |> ALIVE &&
                 element |> neighbors |> ALIVE |> count ∉ 2:3)
-                change_state(space, element, DEAD)
+                change_state!(space, element, DEAD)
             end
 
             if (element |> DEAD &&
                 element |> neighbors |> ALIVE |> count == 3)
-                change_state(space, element, ALIVE)
+                change_state!(space, element, ALIVE)
             end
 
-            release_all!(neighbors)
+            release_all!(neighbors.cache)
+
         end
-
-        apply_changes!(space, topology)
-
     end
 
 
-    if !DEBUG
+    if !debug
         save_image(drawer, "output.gif")
     end
 
@@ -275,4 +269,4 @@ function process(turns::Int64, debug::Bool)
 end
 
 
-process(TURNS, DEBUG)
+@time process(TURNS, DEBUG)
