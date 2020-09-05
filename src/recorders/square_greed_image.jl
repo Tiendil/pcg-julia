@@ -1,5 +1,7 @@
 module SquareGreedImage
 
+# using InteractiveUtils
+
 using Images, Reel
 
 using ...PCG.Geometry: Size, Point
@@ -27,7 +29,7 @@ struct Biome
 end
 
 
-mutable struct SquareGreedImageRecorder <: Recorder
+struct SquareGreedImageRecorder <: Recorder
     cell_size::Size
     duration::Int32
 
@@ -50,6 +52,7 @@ end
 
 function save_image(drawer::SquareGreedImageRecorder, filename::String)
 
+    # TODO: specify fps directly?
     frames = Frames(MIME("image/png"), fps=1.0 / (drawer.duration / 1000))
 
     # TODO: rewrite to dot syntax
@@ -88,10 +91,10 @@ function Spaces.record_state!(space::Space, topology::Topology, recorder::Square
     #TODO: rewrite
     canvas_size = ceil(Point(topology.width, topology.height) * recorder.cell_size)
 
-    # TODO: fill with monotone color (use zeros? https://docs.julialang.org/en/v1/base/arrays/#Base.zeros)
-    canvas = rand(RGB, Int64(canvas_size.y), Int64(canvas_size.x))
+    canvas = fill(RGB(0, 0, 0), Int64(canvas_size.y), Int64(canvas_size.x))
 
     for (index, node) in all(space, topology)
+        choose_biome(recorder, node)
         biome = choose_biome(recorder, node)
 
         position = node_position(recorder, index, canvas_size)

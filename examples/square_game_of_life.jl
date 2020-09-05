@@ -1,4 +1,6 @@
 
+using InteractiveUtils
+
 using Images
 
 using PCG
@@ -168,7 +170,6 @@ function (state::State)(elements::AreaElements)
     return elements
 end
 
-using InteractiveUtils
 
 # TODO: replace with more abstract logic
 function change_state(space::Space, element::Element, state::State)
@@ -206,9 +207,9 @@ function process(turns::Int64, debug::Bool)
 
     drawer = SquareGreedImageRecorder(CELL_SIZE, convert(Int32, 100))
 
-    add_biome(drawer, Biome(ALIVE, Sprite(RGBA(1, 1, 1), CELL_SIZE)))
-    add_biome(drawer, Biome(DEAD, Sprite(RGBA(0, 0, 0), CELL_SIZE)))
-    # add_biome(drawer, Biome(All(), Sprite(RGBA(1, 0, 0), CELL_SIZE)))
+    add_biome(drawer, Biome(ALIVE, Sprite(RGB(1, 1, 1), CELL_SIZE)))
+    add_biome(drawer, Biome(DEAD, Sprite(RGB(0, 0, 0), CELL_SIZE)))
+    # add_biome(drawer, Biome(All(), Sprite(RGB(1, 0, 0), CELL_SIZE)))
 
     turns_logger = TurnsLoggerRecorder(0, TURNS + 2)
 
@@ -267,11 +268,11 @@ function process(turns::Int64, debug::Bool)
 
 
     if !DEBUG
-        save_image(drawer, "output.webm")
+        save_image(drawer, "output.gif")
     end
 
     println("processed")
 end
 
 
-@time process(TURNS, DEBUG)
+process(TURNS, DEBUG)
