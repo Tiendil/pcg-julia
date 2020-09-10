@@ -2,7 +2,9 @@ module TurnsLogger
 
 using ...PCG.Topologies: Topology
 using ...PCG.Types: Recorder
-using ...PCG.Spaces
+using ...PCG.Storages
+using ...PCG.Universes
+using ...PCG.Universes: Universe
 
 export TurnsLoggerRecorder
 
@@ -10,22 +12,24 @@ export TurnsLoggerRecorder
 const NO_TURNS_LIMIT = -1::Int64
 
 
-mutable struct TurnsLoggerRecorder <: Recorder
-    turn_number::Int64
+struct TurnsLoggerRecorder <: Recorder
     total_turns::Int64
 
-    TurnsLoggerRecorder(turn_number::Int64=0, total_turns::Int64=NO_TURNS_LIMIT) = new(turn_number, total_turns)
+    TurnsLoggerRecorder(total_turns::Int64=NO_TURNS_LIMIT) = new(total_turns)
 end
 
 
-function Spaces.record_state!(space::Space, topology::Topology, recorder::TurnsLoggerRecorder)
-    recorder.turn_number += 1
-
+function Universes.record_state!(universe::Universe, recorder::TurnsLoggerRecorder)
     if recorder.total_turns == NO_TURNS_LIMIT
-        println("turn $(recorder.turn_number) processed")
+        println("turn $(universe.turn) processed")
     else
-        println("turn $(recorder.turn_number)/$(recorder.total_turns) processed")
+        println("turn $(universe.turn)/$(recorder.total_turns) processed")
     end
+end
+
+
+function Universes.finish_recording!(recorder::TurnsLoggerRecorder)
+    println("processed")
 end
 
 end

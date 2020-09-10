@@ -1,67 +1,45 @@
 module SquareGreedImage
 
-# using InteractiveUtils
-
 using Images, Reel
 
 using ...PCG.Geometry: Size, Point
 using ...PCG.Types: Recorder
-using ...PCG.Spaces
-using ...PCG.Spaces.LinearSpaces
+using ...PCG.Storages
+using ...PCG.Storages.LinearStorages
 using ...PCG.Topologies
 using ...PCG.Topologies.SquareGreedTopologies
+using ...PCG.Universes
+using ...PCG.Universes: Universe
+using ...PCG.Operations
 
 
 export Sprite, Biome, SquareGreedImageRecorder, add_biome, save_image
 
+const Image = Array{RGB{Normed{UInt8,8}}, 2}
+
+
 struct Sprite
-    color::Any
-    _image::Any
+    color::RGB
+    _image::Image
 end
 
 
 Sprite(color, cell_size::Size) = Sprite(color, fill(color, (Int64(cell_size.y), Int64(cell_size.x))))
 
 
-struct Biome
-    checker::Any
-    sprite::Sprite
-end
-
-
 struct SquareGreedImageRecorder <: Recorder
     cell_size::Size
     duration::Int32
+    filename::String
 
-    _biomes::Array{Biome, 1}
-    _frames::Array{Any, 1}
+    _frames::Vector{Image}
 end
 
 
-SquareGreedImageRecorder(cell_size::Size, duration::Int32) = SquareGreedImageRecorder(cell_size,
-                                                                                      duration,
-                                                                                      [],
-                                                                                      [])
-
-
-
-function add_biome(drawer::SquareGreedImageRecorder, biome::Biome)
-    push!(drawer._biomes, biome)
-end
-
-
-function save_image(drawer::SquareGreedImageRecorder, filename::String)
-
-    # TODO: specify fps directly?
-    frames = Frames(MIME("image/png"), fps=1.0 / (drawer.duration / 1000))
-
-    # TODO: rewrite to dot syntax
-    for frame in drawer._frames
-        push!(frames, frame)
-    end
-
-    write(filename, frames)
-end
+SquareGreedImageRecorder(cell_size::Size, duration::Int32, filename::String) = SquareGreedImageRecorder(cell_size,
+                                                                                                        duration,
+                                                                                                        filename,
+                                                                                                        [])
 
 
 function node_position(recorder::SquareGreedImageRecorder, index::SquareGreedIndex, canvas_size::Point)
@@ -70,36 +48,22 @@ function node_position(recorder::SquareGreedImageRecorder, index::SquareGreedInd
 end
 
 
-###########################################################
-# TODO: that code duplicates "all" prdicate from examples
-
-function to_index(topology::Topology, i::SquareGreedIndex)
-    return LinearSpaceIndex((i.y - 1) * topology.height + i.x)
-end
-
-function all(space::Space, topology::Topology)
-    return ((i, get_node(space, to_index(topology, i)))
-            for i in nodes_coordinates(topology))
-end
-
-#
-############################################################
+function choose_sprite end
 
 
-function Spaces.record_state!(space::Space, topology::Topology, recorder::SquareGreedImageRecorder)
+function Universes.record_state!(universe::Universe, recorder::SquareGreedImageRecorder)
 
     #TODO: rewrite
-    canvas_size = ceil(Point(topology.width, topology.height) * recorder.cell_size)
+    canvas_size = ceil(Point(universe.topology.width, universe.topology.height) * recorder.cell_size)
 
-    canvas = fill(RGB(0, 0, 0), Int64(canvas_size.y), Int64(canvas_size.x))
+    canvas = Image(undef, Int64(canvas_size.y), Int64(canvas_size.x))
 
-    for (index, node) in all(space, topology)
-        choose_biome(recorder, node)
-        biome = choose_biome(recorder, node)
+    universe(complete_turn=false) do element
+        sprite = choose_sprite(recorder, element)
 
-        position = node_position(recorder, index, canvas_size)
+        position = node_position(recorder, element.topology_index, canvas_size)
 
-        image = biome.sprite._image
+        image = sprite._image
 
         # TODO: move out?
         sprite_size = size(image)
@@ -121,12 +85,17 @@ function Spaces.record_state!(space::Space, topology::Topology, recorder::Square
 end
 
 
-function choose_biome(drawer::SquareGreedImageRecorder, node::SpaceNode)
-    for biome in drawer._biomes
-        if check(node, biome.checker)
-            return biome
-        end
+function Universes.finish_recording!(recorder::SquareGreedImageRecorder)
+    # TODO: specify fps directly?
+    frames = Frames(MIME("image/png"), fps=1.0 / (recorder.duration / 1000))
+
+    # TODO: rewrite to dot syntax
+    for frame in recorder._frames
+        push!(frames, frame)
     end
+
+    write(recorder.filename, frames)
+
 end
 
 

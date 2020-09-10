@@ -23,7 +23,7 @@ function reserve!(cache::ArraysCache{T}, size::Int64) where T
         end
     end
 
-    new_array = T(UndefInitializer(), size)
+    new_array = T(undef, size)
 
     push!(cache.used, true)
     push!(cache.arrays, new_array)

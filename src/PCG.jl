@@ -12,13 +12,19 @@ import .Geometry
 include("topologies/Topologies.jl")
 import .Topologies
 
-include("spaces/Spaces.jl")
-import .Spaces
+include("storages/Storages.jl")
+import .Storages
 
-# include("square_greed.jl")
-# import .SquareGreed
+include("universes.jl")
+import .Universes
+
+include("operations.jl")
+import .Operations
 
 include("recorders/Recorders.jl")
 import .Recorders
+
+include("spaces.jl")
+import .Spaces
 
 end

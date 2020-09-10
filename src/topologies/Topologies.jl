@@ -1,7 +1,7 @@
 
 module Topologies
 
-export Topology, TopologyIndex, nodes_coordinates, is_valid
+export Topology, TopologyIndex, coordinates, is_valid, storage_index
 
 
 abstract type Topology end
@@ -10,18 +10,21 @@ abstract type TopologyIndex end
 
 # TODO: specify types
 
-function nodes_coordinates end
+function coordinates end
+
+function storage_index end
 
 function is_valid end
 
 
 module SquareGreedTopologies
 
-export SquareGreedIndex, SquareGreedTopology, square_area_template, SquareGreedIndexes
+export SquareGreedIndex, SquareGreedTopology, square_area_template, SquareGreedIndexes, SquareGreedNeighborhood
 
+using ...PCG.Types
 using ...PCG.Geometry: Point
 using ...PCG.Topologies
-using ...PCG.Topologies: Topology, TopologyIndex, nodes_coordinates
+using ...PCG.Topologies: Topology, TopologyIndex, coordinates
 
 
 const SquareGreedSize = Int64
@@ -60,7 +63,7 @@ end
 
 
 # TODO: check if indexes generated in column-first order
-function Topologies.nodes_coordinates(topology::SquareGreedTopology)
+function Topologies.coordinates(topology::SquareGreedTopology)
     return (SquareGreedIndex(x, y) for y=1:topology.height, x=1:topology.width)
 end
 
@@ -86,6 +89,39 @@ function square_area_template(min_distance::SquareGreedSize, max_distance::Squar
     end
 
     return area
+end
+
+
+struct SquareGreedNeighborhood
+    template::SquareGreedIndexes
+
+    function SquareGreedNeighborhood()
+        # TODO: refactor to parametrized template
+        template = square_area_template(1, 1)
+        return new(template)
+    end
+
+end
+
+
+
+function (neighborhood::SquareGreedNeighborhood)(element::E) where E
+    # TODO: create metafunction
+    elements = reserve_area!(element, length(neighborhood.template))
+
+    # TODO: optimize?
+    fill!(elements, disable(element))
+
+    for (i, delta) in enumerate(neighborhood.template)
+        coordinates = element.topology_index + delta
+
+        # TODO: do smth with that
+        if is_valid(element.universe.topology, coordinates)
+            elements[i] = construct_element(E, element.universe, coordinates)
+        end
+    end
+
+    return elements
 end
 
 
