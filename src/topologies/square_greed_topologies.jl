@@ -44,6 +44,9 @@ function Topologies.is_valid(topology::SquareGreedTopology, index::SquareGreedIn
 end
 
 
+Topologies.index_type(::SquareGreedTopology) = SquareGreedIndex
+
+
 # TODO: check if indexes generated in column-first order
 function Topologies.coordinates(topology::SquareGreedTopology)
     return (SquareGreedIndex(x, y) for y=1:topology.height, x=1:topology.width)

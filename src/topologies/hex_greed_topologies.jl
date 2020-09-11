@@ -138,6 +138,9 @@ struct HexGreedTopology <: Topology
 end
 
 
+Topologies.index_type(::HexGreedTopology) = HexGreedIndex
+
+
 function Topologies.is_valid(topology::HexGreedTopology, index::HexGreedIndex)
     return hex_length(index) <= topology.radius
 end

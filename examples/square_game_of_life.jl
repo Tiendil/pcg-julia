@@ -1,21 +1,15 @@
 
-using InteractiveUtils
-
 using Images
 
-using PCG
+using PCG.Types
 using PCG.Geometry
-using PCG.Topologies
+using PCG.Universes
 using PCG.Topologies.SquareGreedTopologies
 using PCG.Recorders.GreedImages
 using PCG.Recorders.SquareGreedImages
 using PCG.Recorders.TurnsLogger
-using PCG.Storages
-using PCG.Storages.LinearStorages
-using PCG.Universes
 using PCG.Operations
-
-using PCG.Types
+using PCG.Spaces
 
 
 const WIDTH = 80
@@ -29,6 +23,7 @@ struct State <: Checkable
     value::Int64
 end
 
+
 function Operations.check(element::Element, parameters::State)
     return element.node.current.state == parameters
 end
@@ -38,7 +33,6 @@ const DEAD = State(1)
 const ALIVE = State(2)
 
 
-# TODO: specify parent class
 struct Properties
     state::State
 end
@@ -48,8 +42,6 @@ const SPRITE_ALIVE_CELL = SquareSprite(RGB(1, 1, 1), CELL_SIZE)
 const SPRITE_DEAD_CELL = SquareSprite(RGB(0, 0, 0), CELL_SIZE)
 
 
-# TODO: does that is correct way to specify function for object?
-#       probably note
 function GreedImages.choose_sprite(recorder::GreedImageRecorder, element)
     if element |> ALIVE
         return SPRITE_ALIVE_CELL
@@ -57,32 +49,6 @@ function GreedImages.choose_sprite(recorder::GreedImageRecorder, element)
 
     # in case of dead cell
     return SPRITE_DEAD_CELL
-end
-
-
-function initialize()
-    drawer = GreedImageRecorder(CELL_SIZE, 100, "output.gif")
-
-    turns_logger = TurnsLoggerRecorder(TURNS + 1)
-
-    if DEBUG
-        recorders = Recorder[]
-    else
-        recorders = [drawer, turns_logger]
-    end
-
-    topology = SquareGreedTopology(WIDTH, HEIGHT)
-
-    storage = LinearStorage(Properties(DEAD), storage_size(LinearStorage, topology))
-
-    universe = Universe(storage, topology, recorders)
-
-    universe.cache = AreaCache{typeof(universe),
-                               SquareGreedIndex,
-                               LinearStorageIndex,
-                               StorageNode{Properties}}()
-
-    return universe
 end
 
 
@@ -115,7 +81,12 @@ function process(universe::Universe, turns::Int64)
 end
 
 
-universe = initialize()
+topology = SquareGreedTopology(WIDTH, HEIGHT)
+
+universe = initialize(topology,
+                      Properties(DEAD),
+                      DEBUG ? Recorder[] : [TurnsLoggerRecorder(),
+                                            GreedImageRecorder(CELL_SIZE, 100, "output.gif")])
 
 # precompile
 @time process(universe, 1)

@@ -1,15 +1,18 @@
 
 module Spaces
 
+using ..PCG.Types
 using ..PCG.Universes
 using ..PCG.Topologies
 using ..PCG.Topologies.SquareGreedTopologies
 using ..PCG.Topologies.HexGreedTopologies
+using ..PCG.Storages
 using ..PCG.Storages.LinearStorages
 
 
-# TODO: add dispatch by storage type
+export initialize
 
+# TODO: add dispatch by storage type
 
 # TODO: does name correct
 # TODO: does topology attribute requred (SquareGreedIndex should contain all required information)
@@ -42,6 +45,20 @@ function Universes.storage_size(::Type{LinearStorage}, topology::HexGreedTopolog
     height = topology.radius * 2 # q
     width = topology.radius  * 4 # r
     return height * width
+end
+
+
+function initialize(topology::Topology, base_property, recorders::Recorders)
+    storage = LinearStorage(base_property, storage_size(LinearStorage, topology))
+
+    universe = Universe(storage, topology, recorders)
+
+    universe.cache = AreaCache{typeof(universe),
+                               index_type(topology),
+                               LinearStorageIndex,
+                               StorageNode{typeof(base_property)}}()
+
+    return universe
 end
 
 
