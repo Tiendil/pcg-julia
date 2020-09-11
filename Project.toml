@@ -4,6 +4,7 @@ authors = ["Aleksey Yeletsky (Tiendil) <a.eletsky@gmail.com>"]
 version = "0.1.0"
 
 [deps]
+ImageDraw = "4381153b-2b60-58ae-a1ba-fd683676385f"
 Images = "916415d5-f1e6-5110-898d-aaa5f9f070e0"
 Reel = "71555da5-176e-5e73-a222-aebc6c6e4f2f"
 Setfield = "efcf1570-3423-57d1-acb7-fd33fddbac46"

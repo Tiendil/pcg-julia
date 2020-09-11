@@ -6,9 +6,9 @@ using Images
 using PCG
 using PCG.Geometry
 using PCG.Topologies
-using PCG.Topologies.SquareGreedTopologies
+using PCG.Topologies.HexGreedTopologies
 using PCG.Recorders.GreedImages
-using PCG.Recorders.SquareGreedImages
+using PCG.Recorders.HexGreedImages
 using PCG.Recorders.TurnsLogger
 using PCG.Storages
 using PCG.Storages.LinearStorages
@@ -18,8 +18,9 @@ using PCG.Operations
 using PCG.Types
 
 
-const WIDTH = 80
-const HEIGHT = 80
+# const WIDTH = 80
+# const HEIGHT = 80
+const RADIUS = 40
 const CELL_SIZE = Size(5, 5)
 const TURNS = 100
 const DEBUG = false
@@ -44,8 +45,8 @@ struct Properties
 end
 
 
-const SPRITE_ALIVE_CELL = SquareSprite(RGB(1, 1, 1), CELL_SIZE)
-const SPRITE_DEAD_CELL = SquareSprite(RGB(0, 0, 0), CELL_SIZE)
+const SPRITE_ALIVE_CELL = HexSprite(RGBA(1, 1, 1, 1), CELL_SIZE)
+const SPRITE_DEAD_CELL = HexSprite(RGBA(0, 0, 0, 1), CELL_SIZE)
 
 
 # TODO: does that is correct way to specify function for object?
@@ -71,14 +72,14 @@ function initialize()
         recorders = [drawer, turns_logger]
     end
 
-    topology = SquareGreedTopology(WIDTH, HEIGHT)
+    topology = HexGreedTopology(RADIUS)
 
     storage = LinearStorage(Properties(DEAD), storage_size(LinearStorage, topology))
 
     universe = Universe(storage, topology, recorders)
 
     universe.cache = AreaCache{typeof(universe),
-                               SquareGreedIndex,
+                               HexGreedIndex,
                                LinearStorageIndex,
                                StorageNode{Properties}}()
 
@@ -88,7 +89,7 @@ end
 
 function process(universe::Universe, turns::Int64)
 
-    neighbors = SquareGreedNeighborhood()
+    neighbors = HexGreedNeighborhood()
 
     universe() do element
         if element |> Fraction(0.2)

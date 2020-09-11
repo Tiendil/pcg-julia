@@ -5,15 +5,19 @@ using Setfield
 
 using ...PCG.Types
 using ...PCG.Storages: get_node, apply_changes!, Storage, StorageIndex, StorageNode
-using ...PCG.Topologies: Topology, TopologyIndex, coordinates, storage_index
+using ...PCG.Topologies: Topology, TopologyIndex, coordinates
 using ...PCG.Storages
 using PCG.ArraysCaches
 
 
-export Element, AreaElements, Universe, finish_recording!, AreaCache, construct_element, enabled
+export Element, AreaElements, Universe, finish_recording!, AreaCache, construct_element, enabled, storage_index, storage_size
 
 
 abstract type AbstractUniverse end
+
+
+function storage_index end
+function storage_size end
 
 
 struct Element{U<:AbstractUniverse, TI<:TopologyIndex, SI<:StorageIndex, N<:StorageNode}
@@ -61,7 +65,7 @@ Universe(storage::S, topology::T, recorders::Recorders) where {S, T} = Universe(
 
 # TODO: lazy calculation of fields "storage_index" & "node"?
 function Element(universe::Universe, i::TI) where {TI<:TopologyIndex}
-    index = storage_index(universe.topology, i)
+    index = storage_index(universe.storage, universe.topology, i)
     node = get_node(universe.storage, index)
     return Element(true, universe, i, index, node)
 end
@@ -69,7 +73,7 @@ end
 
 # TODO: why constructor call by template variable does not see short constructor?
 function Types.construct_element(::Type{Element{U, TI, SI, N}}, universe::U, i::TI)::Element{U, TI, SI, N} where {U<:AbstractUniverse, TI<:TopologyIndex, SI<:StorageIndex, N<:StorageNode}
-    index = storage_index(universe.topology, i)
+    index = storage_index(universe.storage, universe.topology, i)
     node = get_node(universe.storage, index)
     return Element{U, TI, SI, N}(true, universe, i, index, node)
 end

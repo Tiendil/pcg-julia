@@ -1,15 +1,21 @@
 module Geometry
 
-export Point, Points, Size, BoundingBox
+export Point, Points, Size, BoundingBox, xy
 
-struct Point
-    x::Float32
-    y::Float32
+struct Point{T}
+    x::T
+    y::T
 end
+
+
+xy(point::Point) = (point.x, point.y)
 
 
 Base.ceil(point::Point) = Point(ceil(point.x),
                                 ceil(point.y))
+
+Base.:+(a::Point, b::Point) = Point(a.x + b.x,
+                                    a.y + b.y)
 
 Base.:-(a::Point, b::Point) = Point(a.x - b.x,
                                     a.y - b.y)
@@ -20,19 +26,34 @@ Base.:*(a::Point, b::Point) = Point(a.x * b.x,
 Base.:/(a::Point, b::Int64) = Point(a.x / b,
                                     a.y / b)
 
-const Points = Array{Point, 1}
+
+function Base.ceil(::Type{T}, point::Point{B}) where {T, B}
+    return Point(ceil(T, point.x),
+                 ceil(T, point.y))
+end
+
+const Points{T} = Vector{Point{T}}
 
 
-struct Size
-    x::Float32
-    y::Float32
+struct Size{T}
+    x::T
+    y::T
 end
 
 Base.ceil(size::Size) = Size(ceil(size.x),
                              ceil(size.y))
 
+Base.:-(a::Size, b::Size) = Size(a.x - b.x,
+                                 a.y - b.y)
+
 Base.:*(a::Size, b::Size) = Size(a.x * b.x,
                                  a.y * b.y)
+
+Base.:*(a::Size, b::Number) = Size(a.x * b,
+                                   a.y * b)
+
+Base.:/(a::Size, b::Int64) = Size(a.x / b,
+                                  a.y / b)
 
 # TODO: bad decision?
 Base.:*(a::Size, b::Point) = Point(a.x * b.x,
@@ -42,10 +63,10 @@ Base.:*(a::Point, b::Size) = Point(a.x * b.x,
 
 
 struct BoundingBox
-    x_min::Float32
-    x_max::Float32
-    y_min::Float32
-    y_max::Float32
+    x_min::Float64
+    x_max::Float64
+    y_min::Float64
+    y_max::Float64
 end
 
 
@@ -64,5 +85,11 @@ BoundingBox(points::Points) = reduce(+, BoundingBox.(points), init=BoundingBox(p
 
 Size(box::BoundingBox) = Size(box.x_max - box.x_min,
                               box.y_max - box.y_min)
+
+function Base.ceil(::Type{T}, size::Size{B}) where {T, B}
+    return Size(ceil(T, size.x),
+                ceil(T, size.y))
+end
+
 
 end
