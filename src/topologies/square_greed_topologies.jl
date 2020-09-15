@@ -1,7 +1,7 @@
 
 module SquareGreedTopologies
 
-export SquareGreedIndex, SquareGreedTopology, square_area_template, SquareGreedIndexes, SquareGreedNeighborhood
+export SquareGreedIndex, SquareGreedTopology, SquareGreedIndexes, SquareGreedNeighborhood, manhattan_distance, ring_distance, euclidean_distance
 
 using ...PCG.Types
 using ...PCG.Geometry: Point
@@ -15,6 +15,22 @@ const SquareGreedSize = Int64
 struct SquareGreedIndex <: TopologyIndex
     x::SquareGreedSize
     y::SquareGreedSize
+end
+
+
+Base.zero(::Type{SquareGreedIndex}) = SquareGreedIndex(0, 0)
+Base.zero(::SquareGreedIndex) = SquareGreedIndex(0, 0)
+
+
+function Types.neighborsof(i::SquareGreedIndex)
+    return [SquareGreedIndex(i.x+1, i.y+0),
+            SquareGreedIndex(i.x+1, i.y+1),
+            SquareGreedIndex(i.x+0, i.y+1),
+            SquareGreedIndex(i.x-1, i.y+1),
+            SquareGreedIndex(i.x-1, i.y+0),
+            SquareGreedIndex(i.x-1, i.y-1),
+            SquareGreedIndex(i.x-0, i.y-1),
+            SquareGreedIndex(i.x+1, i.y-1)]
 end
 
 
@@ -53,60 +69,18 @@ function Topologies.coordinates(topology::SquareGreedTopology)
 end
 
 
-function square_distance(a::SquareGreedIndex, b::SquareGreedIndex=SquareGreedIndex(0, 0))
+function manhattan_distance(a::SquareGreedIndex, b::SquareGreedIndex=zero(SquareGreedIndex))
+    return abs(a.x-b.x) + abs(a.y-b.y)
+end
+
+
+function ring_distance(a::SquareGreedIndex, b::SquareGreedIndex=zero(SquareGreedIndex))
     return max(abs(a.x-b.x), abs(a.y-b.y))
 end
 
 
-function square_area_template(min_distance::SquareGreedSize, max_distance::SquareGreedSize)
-    # TODO: reserve correct array size
-    area = SquareGreedIndexes()
-
-    for dx in (-max_distance):(max_distance + 1)
-        for dy in (-max_distance):(max_distance + 1)
-
-            index = SquareGreedIndex(dx, dy)
-
-            if min_distance <= square_distance(index) <= max_distance
-                push!(area, index)
-            end
-        end
-    end
-
-    return area
-end
-
-
-struct SquareGreedNeighborhood
-    template::SquareGreedIndexes
-
-    function SquareGreedNeighborhood()
-        # TODO: refactor to parametrized template
-        template = square_area_template(1, 1)
-        return new(template)
-    end
-
-end
-
-
-
-function (neighborhood::SquareGreedNeighborhood)(element::E) where E
-    # TODO: create metafunction
-    elements = reserve_area!(element, length(neighborhood.template))
-
-    # TODO: optimize?
-    fill!(elements, disable(element))
-
-    for (i, delta) in enumerate(neighborhood.template)
-        coordinates = element.topology_index + delta
-
-        # TODO: do smth with that
-        if is_valid(element.universe.topology, coordinates)
-            elements[i] = construct_element(E, element.universe, coordinates)
-        end
-    end
-
-    return elements
+function euclidean_distance(a::SquareGreedIndex, b::SquareGreedIndex=zero(SquareGreedIndex))
+    return sqrt((a.x-b.x)^2 + abs(a.y-b.y)^2)
 end
 
 

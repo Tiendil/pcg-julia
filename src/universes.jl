@@ -10,7 +10,7 @@ using ...PCG.Storages
 using PCG.ArraysCaches
 
 
-export Element, AreaElements, Universe, finish_recording!, AreaCache, construct_element, enabled, storage_index, storage_size
+export Element, AreaElements, Universe, finish_recording!, AreaCache, construct_current_element, construct_new_element, enabled, storage_index, storage_size, complete_turn!
 
 
 abstract type AbstractUniverse end
@@ -20,13 +20,14 @@ function storage_index end
 function storage_size end
 
 
-struct Element{U<:AbstractUniverse, TI<:TopologyIndex, SI<:StorageIndex, N<:StorageNode}
+struct Element{U<:AbstractUniverse, TI<:TopologyIndex, SI<:StorageIndex, P<:AbstractProperties}
     enabled::Bool # TODO: is other way exists to emulate Union{Element, Nothing} for not isbits element?
     universe::U
     topology_index::TI
     storage_index::SI
-    node::N
+    properties::P
 end
+
 
 
 function Types.isenabled(element::Element)
@@ -36,13 +37,19 @@ end
 
 function Types.disable(element::E) where E
     # TODO: simplify?
-    return E(false, element.universe, element.topology_index, element.storage_index, element.node)
+    return E(false, element.universe, element.topology_index, element.storage_index, element.properties)
 end
+
+
+Base.convert(::Type{Bool}, element::Element) = isenabled(element)
 
 
 const AreaElements{U, TI, SI, N} = Vector{Element{U, TI, SI, N}}
 
-const AreaCache{U, TI, SI, N} = ArraysCache{AreaElements{U, TI, SI, N}}
+
+Base.convert(::Type{Bool}, elements::AreaElements) = any(convert(Bool, element) for element in elements)
+
+const AreaCache{U, TI, SI, P} = ArraysCache{AreaElements{U, TI, SI, P}}
 
 
 mutable struct Universe{S<:Storage, T<:Topology} <: AbstractUniverse
@@ -67,20 +74,28 @@ Universe(storage::S, topology::T, recorders::Recorders) where {S, T} = Universe(
 function Element(universe::Universe, i::TI) where {TI<:TopologyIndex}
     index = storage_index(universe.storage, universe.topology, i)
     node = get_node(universe.storage, index)
-    return Element(true, universe, i, index, node)
+    return Element(true, universe, i, index, node.current)
 end
 
+# TODO refactor construct_*_element functions into one
 
 # TODO: why constructor call by template variable does not see short constructor?
-function Types.construct_element(::Type{Element{U, TI, SI, N}}, universe::U, i::TI)::Element{U, TI, SI, N} where {U<:AbstractUniverse, TI<:TopologyIndex, SI<:StorageIndex, N<:StorageNode}
+function Types.construct_current_element(::Type{Element{U, TI, SI, P}}, universe::U, i::TI)::Element{U, TI, SI, P} where {U<:AbstractUniverse, TI<:TopologyIndex, SI<:StorageIndex, P<:AbstractProperties}
     index = storage_index(universe.storage, universe.topology, i)
     node = get_node(universe.storage, index)
-    return Element{U, TI, SI, N}(true, universe, i, index, node)
+    return Element{U, TI, SI, P}(true, universe, i, index, node.current)
 end
 
 
-function Types.reserve_area!(element::Element{U, TI, SI, N}, size::Int64)::AreaElements{U, TI, SI, N} where {U, TI, SI, N}
-    return reserve!(element.universe.cache::AreaCache{U, TI, SI, N}, size)
+function Types.construct_new_element(::Type{Element{U, TI, SI, P}}, universe::U, i::TI)::Element{U, TI, SI, P} where {U<:AbstractUniverse, TI<:TopologyIndex, SI<:StorageIndex, P<:AbstractProperties}
+    index = storage_index(universe.storage, universe.topology, i)
+    node = get_node(universe.storage, index)
+    return Element{U, TI, SI, P}(true, universe, i, index, node.new)
+end
+
+
+function Types.reserve_area!(element::Element{U, TI, SI, P}, size::Int64)::AreaElements{U, TI, SI, P} where {U, TI, SI, P}
+    return reserve!(element.universe.cache::AreaCache{U, TI, SI, P}, size)
 end
 
 
@@ -113,15 +128,17 @@ function finish_recording!(universe::Universe)
 end
 
 
-function (universe::Universe)(callback::Function; complete_turn::Bool=true)
-    for i in coordinates(universe.topology)
-        element = Element(universe, i)
-        callback(element)
-        release_all!(universe.cache)
-    end
+function (universe::Universe)(callback::Function; complete_turn::Bool=true, turns::Turn=1)
+    for turn in 1:turns
+        for i in coordinates(universe.topology)
+            element = Element(universe, i)
+            callback(element)
+            release_all!(universe.cache)
+        end
 
-    if complete_turn
-        complete_turn!(universe)
+        if complete_turn
+            complete_turn!(universe)
+        end
     end
 end
 
@@ -133,8 +150,8 @@ end
 
 # TODO: construct new node on base of already changed new node?
 function Base.:<<(element::Element, new_values::NamedTuple)
-    new_node = StorageNode(element.node.current,
-                           setproperties(element.node.current, new_values),
+    new_node = StorageNode(element.properties,
+                           setproperties(element.properties, new_values),
                            element.universe.turn)
 
     set_node!(element.universe.storage, element.storage_index, new_node)

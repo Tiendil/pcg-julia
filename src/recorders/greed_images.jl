@@ -42,7 +42,7 @@ function Universes.record_state!(universe::Universe, recorder::GreedImageRecorde
 
     image_size = canvas_size(universe.topology, recorder)
 
-    canvas = fill(RGBA(0, 0, 0, 1), image_size.y, image_size.x)
+    canvas = fill(RGBA(0, 0, 0, 1), yx(image_size))
 
     universe(complete_turn=false) do element
         sprite = choose_sprite(recorder, element)

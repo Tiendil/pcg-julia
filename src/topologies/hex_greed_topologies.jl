@@ -3,7 +3,7 @@
 
 module HexGreedTopologies
 
-export HexGreedIndex, HexGreedTopology, square_area_template, HexGreedIndexes, HexGreedNeighborhood, CELL_SIZE, cell_bounding_box, cell_center, cell_corners
+export HexGreedIndex, HexGreedTopology, hex_area_template, HexGreedIndexes, HexGreedNeighborhood, CELL_SIZE, cell_bounding_box, cell_center, cell_corners, manhattan_distance, ring_distance, euclidean_distance
 
 using ...PCG.Types
 using ...PCG.Geometry: Point, BoundingBox, Size
@@ -19,6 +19,10 @@ struct HexGreedIndex <: TopologyIndex
     r::HexGreedSize
     s::HexGreedSize
 end
+
+
+Base.zero(::Type{HexGreedIndex}) = HexGreedIndex(0, 0, 0)
+Base.zero(::HexGreedIndex) = HexGreedIndex(0, 0, 0)
 
 
 Base.:+(a::HexGreedIndex, b::HexGreedIndex) = HexGreedIndex(a.q + b.q,
@@ -49,13 +53,13 @@ const DIRECTIONS = [HexGreedIndex(1, 0, -1),
                     HexGreedIndex(0, 1, -1)]
 
 
-function neighbourof(i::HexGreedIndex, n::Integer)
+function neighborof(i::HexGreedIndex, n::Integer)
     # TODO: change to "n % 6"
     return i + DIRECTIONS[n]
 end
 
 
-function neighboursof(i::HexGreedIndex)
+function Types.neighborsof(i::HexGreedIndex)
     # TODO: rewrite to "." operation
     return [i + di for di in DIRECTIONS]
 end
@@ -67,19 +71,18 @@ struct Orientation
     f2::Float64
     f3::Float64
 
-    b0::Float64
-    b1::Float64
-    b2::Float64
-    b3::Float64
+    start_angle::Float64
 end
 
 
-const LAYOUT_POINTY = Orientation(sqrt(3.0), sqrt(3.0) / 2.0, 0.0, 3.0 / 2.0,
-                                  sqrt(3.0) / 3.0, -1.0 / 3.0, 0.0, 2.0 / 3.0)
+# const LAYOUT_POINTY = Orientation(sqrt(3.0), sqrt(3.0) / 2.0, 0.0, 3.0 / 2.0, 0.5)
+
+const LAYOUT_POINTY = Orientation(3.0 / 2.0, 0.0, sqrt(3.0) /2.0, sqrt(3.0), 0.0)
+
 
 
 function cell_corner_offset(corner::Integer)
-    angle = 2.0 * pi * (0.5 + (corner-1)) / 6
+    angle = 2.0 * pi * (LAYOUT_POINTY.start_angle + (corner-1)) / 6
     return Point(cos(angle), sin(angle))
 end
 
@@ -157,99 +160,21 @@ function hex_length(cell::HexGreedIndex)
 end
 
 
-function hex_distance(a::HexGreedIndex, b::HexGreedIndex)
+function manhattan_distance(a::HexGreedIndex, b::HexGreedIndex=zero(HexGreedIndex))
     return hex_length(a - b)
 end
 
 
-function cells_ring(center::HexGreedIndex, radius::HexGreedSize)
-
-    if radius == 0
-        return [center]
-    end
-
-    if radius == 1
-        return neighboursof(center)
-    end
-
-    # TODO: reserve memory
-    results = []
-
-    cell_pointer = center + DIRECTIONS[5] * radius
-
-    # TODO: replace with cartesian loop
-    for i in 1:6
-        for j in 1:radius
-            push!(results, cell_pointer)
-            cell_pointer = neighbourof(cell_pointer, i)
-        end
-    end
-
-    return results
+function ring_distance(a::HexGreedIndex, b::HexGreedIndex=zero(HexGreedIndex))
+    index = a - b
+    return max(abs(index.q), abs(index.r), abs(index.s))
 end
 
 
-function hex_area_template(min_distance::HexGreedSize, max_distance::HexGreedSize)
-    area = HexGreedIndexes()
-
-    radius = 0
-    max_distance_exceed = false
-
-    center = HexGreedIndex(0, 0, 0)
-
-    while !max_distance_exceed
-
-        max_distance_exceed = true
-
-        for cell in cells_ring(center, radius)
-            cell_distance = hex_distance(center, cell)
-
-            if cell_distance <= max_distance
-                max_distance_exceed = false
-
-                if min_distance <= cell_distance
-                    push!(area, cell)
-                end
-            end
-        end
-
-        radius += 1
-    end
-
-    return area
-end
-
-
-struct HexGreedNeighborhood
-    template::HexGreedIndexes
-
-    function HexGreedNeighborhood()
-        # TODO: refactor to parametrized template
-        template = hex_area_template(1, 1)
-        return new(template)
-    end
-
-end
-
-
-
-function (neighborhood::HexGreedNeighborhood)(element::E) where E
-    # TODO: create metafunction
-    elements = reserve_area!(element, length(neighborhood.template))
-
-    # TODO: optimize?
-    fill!(elements, disable(element))
-
-    for (i, delta) in enumerate(neighborhood.template)
-        coordinates = element.topology_index + delta
-
-        # TODO: do smth with that
-        if is_valid(element.universe.topology, coordinates)
-            elements[i] = construct_element(E, element.universe, coordinates)
-        end
-    end
-
-    return elements
+function euclidean_distance(a::HexGreedIndex, b::HexGreedIndex=zero(HexGreedIndex))
+    p = cell_center(a)
+    q = cell_center(b)
+    return sqrt((p.x-q.x)^2 + abs(p.y-q.y)^2)
 end
 
 

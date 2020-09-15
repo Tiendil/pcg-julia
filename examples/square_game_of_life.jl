@@ -5,11 +5,12 @@ using PCG.Types
 using PCG.Geometry
 using PCG.Universes
 using PCG.Topologies.SquareGreedTopologies
+using PCG.Neighborhoods
+using PCG.Operations
+using PCG.Spaces
 using PCG.Recorders.GreedImages
 using PCG.Recorders.SquareGreedImages
 using PCG.Recorders.TurnsLogger
-using PCG.Operations
-using PCG.Spaces
 
 
 const WIDTH = 80
@@ -25,7 +26,7 @@ end
 
 
 function Operations.check(element::Element, parameters::State)
-    return element.node.current.state == parameters
+    return element.properties.state == parameters
 end
 
 
@@ -33,7 +34,7 @@ const DEAD = State(1)
 const ALIVE = State(2)
 
 
-struct Properties
+struct Properties <: AbstractProperties
     state::State
 end
 
@@ -43,7 +44,7 @@ const SPRITE_DEAD_CELL = SquareSprite(RGB(0, 0, 0), CELL_SIZE)
 
 
 function GreedImages.choose_sprite(recorder::GreedImageRecorder, element)
-    if element |> ALIVE
+    if element |> ALIVE |> exists
         return SPRITE_ALIVE_CELL
     end
 
@@ -54,30 +55,25 @@ end
 
 function process(universe::Universe, turns::Int64)
 
-    neighbors = SquareGreedNeighborhood()
+    ring = Neighborhood(universe.topology, ring_distance)
 
     universe() do element
-        if element |> Fraction(0.2)
+        if element |> Fraction(0.2) |> exists
             element << (state=ALIVE,)
         end
     end
 
-    for i in 1:turns
-        universe() do element
+    universe(turns=turns) do element
 
-            if (element |> ALIVE &&
-                element |> neighbors |> ALIVE |> count ∉ 2:3)
-                element << (state=DEAD,)
-            end
-
-            if (element |> DEAD &&
-                element |> neighbors |> ALIVE |> count == 3)
-                element << (state=ALIVE,)
-            end
-
+        if element |> ALIVE |> ring() |> ALIVE |> count ∉ 2:3
+            element << (state=DEAD,)
         end
-    end
 
+        if element |> DEAD |> ring() |> ALIVE |> count == 3
+            element << (state=ALIVE,)
+        end
+
+    end
 end
 
 

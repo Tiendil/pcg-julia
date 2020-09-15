@@ -18,6 +18,9 @@ import .Storages
 include("universes.jl")
 import .Universes
 
+include("neighborhoods.jl")
+import .Neighborhoods
+
 include("operations.jl")
 import .Operations
 

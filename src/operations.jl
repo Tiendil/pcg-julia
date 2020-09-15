@@ -5,10 +5,17 @@ module Operations
 using ..Types
 using ..Universes: Element, AreaElements
 
-export check, Fraction
+export check, Fraction, exists, not_exists, new
 
 
 function check end
+
+
+exists(element::Element) = convert(Bool, element)
+exists(elements::AreaElements) = convert(Bool, elements)
+
+not_exists(element::Element) = !exists(element)
+not_exists(elements::AreaElements) = !exists(elements)
 
 
 function Base.count(elements::AreaElements)
@@ -34,9 +41,12 @@ function check(element::Element, parameters::Fraction)
 end
 
 
-# TODO: must return element, to allow chain checks
 function (checker::Checkable)(element::E) where {E<:Element}
-    return check(element, checker)
+    if check(element, checker)
+        return element
+    end
+
+    return disable(element)
 end
 
 
@@ -50,6 +60,26 @@ function (checker::Checkable)(elements::Vector{E}) where {E<:Element}
     end
 
     return elements
+end
+
+
+function new(elements::AreaElements)
+    for (i, element) in enumerate(elements)
+        if isenabled(element)
+            elements[i] = construct_new_element(typeof(element), element.universe, element.topology_index)
+        end
+    end
+
+    return elements
+end
+
+
+function new(element::Element)
+    if isenabled(element)
+        return construct_new_element(typeof(element), element.universe, element.topology_index)
+    end
+
+    return element
 end
 
 

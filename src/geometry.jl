@@ -1,6 +1,7 @@
 module Geometry
 
-export Point, Points, Size, BoundingBox, xy
+export Point, Points, Size, BoundingBox, xy, yx
+
 
 struct Point{T}
     x::T
@@ -10,9 +11,14 @@ end
 
 xy(point::Point) = (point.x, point.y)
 
+yx(point::Point) = (point.y, point.x)
+
 
 Base.ceil(point::Point) = Point(ceil(point.x),
                                 ceil(point.y))
+
+Base.round(point::Point) = Point(round(point.x),
+                                 round(point.y))
 
 Base.:+(a::Point, b::Point) = Point(a.x + b.x,
                                     a.y + b.y)
@@ -32,6 +38,13 @@ function Base.ceil(::Type{T}, point::Point{B}) where {T, B}
                  ceil(T, point.y))
 end
 
+
+function Base.round(::Type{T}, point::Point{B}) where {T, B}
+    return Point(round(T, point.x),
+                 round(T, point.y))
+end
+
+
 const Points{T} = Vector{Point{T}}
 
 
@@ -40,8 +53,19 @@ struct Size{T}
     y::T
 end
 
+Size(point::Point{T}) where {T} = Size(point.x, point.y)
+
+Point(size::Size{T}) where {T} = Point(size.x, size.y)
+
+xy(size::Size) = (size.x, size.y)
+
+yx(size::Size) = (size.y, size.x)
+
 Base.ceil(size::Size) = Size(ceil(size.x),
                              ceil(size.y))
+
+Base.:+(a::Size, b::Size) = Size(a.x + b.x,
+                                 a.y + b.y)
 
 Base.:-(a::Size, b::Size) = Size(a.x - b.x,
                                  a.y - b.y)

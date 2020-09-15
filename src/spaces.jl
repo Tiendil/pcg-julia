@@ -56,7 +56,7 @@ function initialize(topology::Topology, base_property, recorders::Recorders)
     universe.cache = AreaCache{typeof(universe),
                                index_type(topology),
                                LinearStorageIndex,
-                               StorageNode{typeof(base_property)}}()
+                               typeof(base_property)}()
 
     return universe
 end

@@ -2,8 +2,9 @@ module HexGreedImages
 
 using Images, Reel, ImageDraw
 
-using ...PCG.Geometry: Size, Point, xy
-using ...PCG.Types: Recorder
+using ...PCG.Geometry
+using ...PCG.Geometry: Point
+using ...PCG.Types
 using ...PCG.Storages
 using ...PCG.Storages.LinearStorages
 using ...PCG.Topologies
@@ -38,30 +39,28 @@ end
 
 
 function HexSprite(color, cell_size::Size)
-    sprite_size = CELL_SIZE * cell_size
+    image_size = ceil(Int64, CELL_SIZE * cell_size) + Size(2, 2)
 
-    image_size = ceil(Int64, sprite_size)
+    image = fill(RGBA(0, 0, 0, 0), yx(image_size))
 
-    image = fill(RGBA(0, 0, 0, 0), (image_size.y, image_size.x))
-
-    center = image_size / 2
+    center = Point(image_size / 2)
 
     cell = HexGreedIndex(0, 0, 0)
 
-    polygon = Polygon([xy(ceil(Int64, Point(center.x, center.y) + point * cell_size))
+    polygon = Polygon([xy(round(Int64, center + point * cell_size))
                        for point in cell_corners(cell)])
 
     draw!(image, polygon, color)
 
-    recursive_fill!(image, ceil(Int64, Point(center.x, center.y)), color)
+    recursive_fill!(image, round(Int64, center), color)
 
     return Sprite(color, image)
 end
 
 
 function GreedImages.node_position(recorder::GreedImageRecorder, index::HexGreedIndex, canvas_size::Size)
-    point = Point(canvas_size.x / 2, canvas_size.y / 2) + (cell_center(index) - Point(1.0, 1.0)) * recorder.cell_size
-    return ceil(Int64, point)
+    point = Point(canvas_size / 2) + (cell_center(index) - Point(1.0, 1.0)) * recorder.cell_size
+    return round(Int64, point)
 end
 
 
@@ -69,9 +68,6 @@ end
 function GreedImages.canvas_size(topology::HexGreedTopology, recorder::GreedImageRecorder)::Size
     return ceil(Int64, CELL_SIZE * recorder.cell_size * (topology.radius * 2 + 2))
 end
-
-
-
 
 
 end
