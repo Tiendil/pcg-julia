@@ -13,8 +13,8 @@ using PCG.Recorders.HexGreedImages
 using PCG.Recorders.TurnsLogger
 
 
-const RADIUS = 40
-const CELL_SIZE = Size(10, 10)
+const RADIUS = 20
+const CELL_SIZE = Size(7, 7)
 const DEBUG = false
 
 
