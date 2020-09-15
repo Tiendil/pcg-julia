@@ -1,0 +1,8 @@
+
+- Clean modules & types hierarchy.
+- Clean names, export, and import expressions.
+- Check all loops and rewrite them to dot syntax.
+- Find all functions, that change states of structures and add "!" to their name (except filter functions).
+- Place macros @inbounds where necessary.
+- Write tests.
+- Find a more appropriate solution to select sprites instead GreedImages.choose_sprite
