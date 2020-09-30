@@ -20,12 +20,11 @@ function storage_index end
 function storage_size end
 
 
-struct Element{U<:AbstractUniverse, TI<:TopologyIndex, SI<:StorageIndex, P<:AbstractProperties}
+struct Element{U<:AbstractUniverse, TI<:TopologyIndex, SI<:StorageIndex}
     enabled::Bool # TODO: is other way exists to emulate Union{Element, Nothing} for not isbits element?
     universe::U
     topology_index::TI
     storage_index::SI
-    properties::P
 end
 
 
@@ -37,19 +36,19 @@ end
 
 function Types.disable(element::E) where E
     # TODO: simplify?
-    return E(false, element.universe, element.topology_index, element.storage_index, element.properties)
+    return E(false, element.universe, element.topology_index, element.storage_index)
 end
 
 
 Base.convert(::Type{Bool}, element::Element) = isenabled(element)
 
 
-const AreaElements{U, TI, SI, N} = Vector{Element{U, TI, SI, N}}
+const AreaElements{U, TI, SI} = Vector{Element{U, TI, SI}}
 
 
 Base.convert(::Type{Bool}, elements::AreaElements) = any(convert(Bool, element) for element in elements)
 
-const AreaCache{U, TI, SI, P} = ArraysCache{AreaElements{U, TI, SI, P}}
+const AreaCache{U, TI, SI} = ArraysCache{AreaElements{U, TI, SI}}
 
 
 mutable struct Universe{S<:Storage, T<:Topology} <: AbstractUniverse
@@ -74,28 +73,20 @@ Universe(storage::S, topology::T, recorders::Recorders) where {S, T} = Universe(
 function Element(universe::Universe, i::TI) where {TI<:TopologyIndex}
     index = storage_index(universe.storage, universe.topology, i)
     node = get_node(universe.storage, index)
-    return Element(true, universe, i, index, node.current)
+    return Element(true, universe, i, index)
 end
 
 # TODO refactor construct_*_element functions into one
 
 # TODO: why constructor call by template variable does not see short constructor?
-function Types.construct_current_element(::Type{Element{U, TI, SI, P}}, universe::U, i::TI)::Element{U, TI, SI, P} where {U<:AbstractUniverse, TI<:TopologyIndex, SI<:StorageIndex, P<:AbstractProperties}
+function Types.construct_element(::Type{Element{U, TI, SI}}, universe::U, i::TI)::Element{U, TI, SI} where {U<:AbstractUniverse, TI<:TopologyIndex, SI<:StorageIndex}
     index = storage_index(universe.storage, universe.topology, i)
-    node = get_node(universe.storage, index)
-    return Element{U, TI, SI, P}(true, universe, i, index, node.current)
+    return Element{U, TI, SI}(true, universe, i, index)
 end
 
 
-function Types.construct_new_element(::Type{Element{U, TI, SI, P}}, universe::U, i::TI)::Element{U, TI, SI, P} where {U<:AbstractUniverse, TI<:TopologyIndex, SI<:StorageIndex, P<:AbstractProperties}
-    index = storage_index(universe.storage, universe.topology, i)
-    node = get_node(universe.storage, index)
-    return Element{U, TI, SI, P}(true, universe, i, index, node.new)
-end
-
-
-function Types.reserve_area!(element::Element{U, TI, SI, P}, size::Int64)::AreaElements{U, TI, SI, P} where {U, TI, SI, P}
-    return reserve!(element.universe.cache::AreaCache{U, TI, SI, P}, size)
+function Types.reserve_area!(element::Element{U, TI, SI}, size::Int64)::AreaElements{U, TI, SI} where {U, TI, SI}
+    return reserve!(element.universe.cache::AreaCache{U, TI, SI}, size)
 end
 
 
@@ -148,13 +139,25 @@ function ArraysCaches.release_all!(universe::Universe)
 end
 
 
-# TODO: construct new node on base of already changed new node?
 function Base.:<<(element::Element, new_values::NamedTuple)
-    new_node = StorageNode(element.properties,
-                           setproperties(element.properties, new_values),
+    saved_node = get_node(element.universe.storage, element.storage_index)
+
+    if saved_node.changed_at == element.universe.turn
+        properties = saved_node.new
+    else
+        properties = saved_node.current
+    end
+
+    new_node = StorageNode(saved_node.current,
+                           setproperties(properties, new_values),
                            element.universe.turn)
 
     set_node!(element.universe.storage, element.storage_index, new_node)
+end
+
+
+function Storages.get_node(element::Element)
+    return get_node(element.universe.storage, element.storage_index)
 end
 
 

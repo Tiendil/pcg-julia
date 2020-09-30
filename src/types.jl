@@ -1,6 +1,6 @@
 module Types
 
-export Recorder, Recorders, AbstractProperties, Turn, reserve_area!, construct_current_element, construct_new_element, isenabled, disable, Checkable, neighborsof
+export Recorder, Recorders, AbstractProperties, Turn, reserve_area!, construct_element, isenabled, disable, Checkable, neighborsof
 
 const Turn = Int64
 
@@ -17,8 +17,7 @@ function reserve_area! end
 
 
 # TODO: remove
-function construct_current_element end
-function construct_new_element end
+function construct_element end
 
 
 # TODO: remove

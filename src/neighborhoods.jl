@@ -173,7 +173,7 @@ function (neighborhood::NeighborhoodTemplate)(element::E) where E
 
         # TODO: do smth with that
         if is_valid(element.universe.topology, coordinates)
-            elements[i] = construct_current_element(E, element.universe, coordinates)
+            elements[i] = construct_element(E, element.universe, coordinates)
         end
     end
 

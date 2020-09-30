@@ -3,9 +3,13 @@ module Operations
 
 
 using ..Types
+using ..Storages
 using ..Universes: Element, AreaElements
 
-export check, Fraction, exists, not_exists, new
+export check, Fraction, exists, not_exists, New
+
+
+function check_properties end
 
 
 function check end
@@ -63,24 +67,20 @@ function (checker::Checkable)(elements::Vector{E}) where {E<:Element}
 end
 
 
-function new(elements::AreaElements)
-    for (i, element) in enumerate(elements)
-        if isenabled(element)
-            elements[i] = construct_new_element(typeof(element), element.universe, element.topology_index)
-        end
-    end
-
-    return elements
+struct New{C <: Checkable} <: Checkable
+    checker::C
 end
 
 
-function new(element::Element)
-    if isenabled(element)
-        return construct_new_element(typeof(element), element.universe, element.topology_index)
-    end
-
-    return element
+function check(element::Element, checker::Checkable)
+    return check_properties(get_node(element).current, checker)
 end
+
+
+function check(element::Element, parameters::New{C}) where {C <: Checkable}
+    return check_properties(get_node(element).new, parameters.checker)
+end
+
 
 
 end

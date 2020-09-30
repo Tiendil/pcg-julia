@@ -25,17 +25,17 @@ struct State <: Checkable
 end
 
 
-function Operations.check(element::Element, parameters::State)
-    return element.properties.state == parameters
-end
-
-
 const DEAD = State(1)
 const ALIVE = State(2)
 
 
 struct Properties <: AbstractProperties
     state::State
+end
+
+
+function Operations.check_properties(properties::Properties, parameters::State)
+    return properties.state == parameters
 end
 
 

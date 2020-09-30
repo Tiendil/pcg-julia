@@ -71,6 +71,7 @@ function Storages.get_node(storage::LinearStorage, i::LinearStorageIndex)
 end
 
 
+#TODO: ensure that new_nodes is container with unique elements
 function Storages.set_node!(storage::LinearStorage, i::LinearStorageIndex, node::StorageNode)
     storage.nodes[i.i] = node
     push!(storage.new_nodes, i)

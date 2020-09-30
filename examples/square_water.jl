@@ -13,11 +13,12 @@ using PCG.Recorders.SquareGreedImages
 using PCG.Recorders.TurnsLogger
 
 
-const WIDTH = 150
-const HEIGHT = 150
-const CELL_SIZE = Size(5, 5)
-const BORDER = 100
-const TURNS = 100
+const WIDTH = 20
+const HEIGHT = 20
+const CELL_SIZE = Size(20, 20)
+const BORDER = 10
+const TURNS = 1000
+const DURATION = 1000
 const DEBUG = false
 
 
@@ -61,7 +62,7 @@ end
 
 const WALL_SPITE = SquareSprite(RGB(1, 1, 0), CELL_SIZE)
 const WATER_SOURCE_SPRITE = SquareSprite(RGB(1, 0, 0), CELL_SIZE)
-const WATER_SPRITES = [SquareSprite(RGB(0, 0, i / 100), CELL_SIZE) for i in 1:100]
+const WATER_SPRITES = [SquareSprite(RGB(0, 0, i / BORDER), CELL_SIZE) for i in 1:BORDER]
 const NO_WATER_SPITE = SquareSprite(RGB(0, 0, 0), CELL_SIZE)
 
 
@@ -90,37 +91,58 @@ function prepair(universe::Universe)
 end
 
 
+function flow(from, to, amount=1)
+    to << (water=Water(to.properties.water.value + amount),)
+    from << (water=Water(from.properties.water.value - amount),)
+end
+
+
 function process(universe::Universe, turns::Int64)
 
     manhattan = Neighborhood(universe.topology, manhattan_distance)
 
     universe(turns=turns) do element
 
-        if element |> WATER_SOURCE |> exists
-            element << (water=Water(BORDER),)
+        println("??? $(element.topology_index)")
+
+        if element |> WALL |> exists
             return
         end
 
-        for neighbor in (element |> manhattan())
-            if !neighbor.enabled
+        if element |> WATER_SOURCE |> exists
+            element << (water=Water(BORDER),)
+        end
+
+        element = element |> new
+
+        for neighbor in (element |> manhattan() |> new)
+            if !isenabled(neighbor)
                 continue
 
             elseif neighbor.properties.water == element.properties.water
                 continue
 
+            # # TODO: contrintuitive Y direction, refactoring required
+            # elseif neighbor.topology_index.y > element.topology_index.y
+            #     if 1 < element.properties.water.value && neighbor.properties.water.value < BORDER
+            #         neighbor << (water=Water(neighbor.properties.water.value + 1),)
+            #         element << (water=Water(element.properties.water.value - 1),)
+            #     end
+
+            # # TODO: contrintuitive Y direction, refactoring required
+            # elseif neighbor.topology_index.y < element.topology_index.y
+            #     if 1 < neighbor.properties.water.value && element.properties.water.value < BORDER
+            #         neighbor << (water=Water(neighbor.properties.water.value - 1),)
+            #         element << (water=Water(element.properties.water.value + 1),)
+            #     end
+
             elseif neighbor.topology_index.y == element.topology_index.y
                 if neighbor.properties.water.value < element.properties.water.value
-                    neighbor << (water=Water(neighbor.properties.water.value + 1),)
-                    element << (water=Water(element.properties.water.value - 1),)
-                else
-                    neighbor << (water=Water(neighbor.properties.water.value - 1),)
-                    element << (water=Water(element.properties.water.value + 1),)
-                end
+                    println("!!!", element.topology_index, "->", neighbor.topology_index)
+                    flow(element, neighbor, 1)
 
-            elseif neighbor.topology_index.y < element.topology_index.y
-                if neighbor.properties.water.value < element.properties.water.value
-                    neighbor << (water=Water(neighbor.properties.water.value + 1),)
-                    element << (water=Water(element.properties.water.value - 1),)
+                # elseif element.properties.water.value < neighbor.properties.water.value
+                #     flow(neighbor, element, 1)
                 end
             end
         end
@@ -134,7 +156,7 @@ topology = SquareGreedTopology(WIDTH, HEIGHT)
 universe = initialize(topology,
                       Properties(EMPTY, Water(0)),
                       DEBUG ? Recorder[] : [TurnsLoggerRecorder(),
-                                            GreedImageRecorder(CELL_SIZE, 100, "output.gif")])
+                                            GreedImageRecorder(CELL_SIZE, DURATION, "output.gif")])
 
 prepair(universe)
 

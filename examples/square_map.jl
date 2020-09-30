@@ -24,11 +24,6 @@ struct Terrain <: Checkable
 end
 
 
-function Operations.check(element::Element, parameters::Terrain)
-    return element.properties.terrain == parameters
-end
-
-
 const GRASS = Terrain(1)
 const WATER = Terrain(2)
 const SAND = Terrain(3)
@@ -37,6 +32,11 @@ const FOREST = Terrain(4)
 
 struct Properties <: AbstractProperties
     terrain::Terrain
+end
+
+
+function Operations.check_properties(properties::Properties, parameters::Terrain)
+    return properties.terrain == parameters
 end
 
 
@@ -114,7 +114,7 @@ function process(universe::Universe)
     universe() do element
         if (element |> GRASS |> Fraction(0.1) |> exists &&
             element |> ring(2, 2) |> FOREST |> exists &&
-            element |> ring() |> new |> FOREST |> not_exists)
+            element |> ring() |> New(FOREST) |> not_exists)
 
             element << (terrain=FOREST,)
         end
