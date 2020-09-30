@@ -1,8 +1,11 @@
 
+using Random
+
 using Images
 
 using PCG.Types
 using PCG.Geometry
+using PCG.Storages
 using PCG.Universes
 using PCG.Topologies.SquareGreedTopologies
 using PCG.Neighborhoods
@@ -16,9 +19,9 @@ using PCG.Recorders.TurnsLogger
 const WIDTH = 20
 const HEIGHT = 20
 const CELL_SIZE = Size(20, 20)
-const BORDER = 10
+const BORDER = 5
 const TURNS = 1000
-const DURATION = 1000
+const DURATION = 100
 const DEBUG = false
 
 
@@ -31,32 +34,29 @@ const WALL = CellType(2)
 const WATER_SOURCE = CellType(3)
 
 
-function Operations.check(element::Element, parameters::CellType)
-    return element.properties.type == parameters
-end
-
-
 struct Water <: Checkable
     value::Int64
 
-    function Water(value::Int64)
-        if 0 <= value <= BORDER
-            return new(value)
-        end
+    # TODO: unkomment?
+    # function Water(value::Int64)
+    #     if 0 <= value <= BORDER
+    #         return new(value)
+    #     end
 
-        error("water amount $(value) not in borders [0, $BORDER]")
-    end
+    #     error("water amount $(value) not in borders [0, $BORDER]")
+    # end
 end
-
-
-# function Operations.check(element::Element, parameters::State)
-#     return element.properties.state == parameters
-# end
 
 
 struct Properties <: AbstractProperties
     type::CellType
-    water::Water
+    static_water::Water
+    dynamic_water::Water
+end
+
+
+function Operations.check_properties(properties::Properties, parameters::CellType)
+    return properties.type == parameters
 end
 
 
@@ -75,10 +75,15 @@ function GreedImages.choose_sprite(recorder::GreedImageRecorder, element)
         return WATER_SOURCE_SPRITE
     end
 
-    water_amount = element.properties.water.value
+    water_amount = get_node(element).current.static_water.value
 
     if water_amount == 0
         return NO_WATER_SPITE
+    end
+
+    # TODO: remove?
+    if water_amount > BORDER
+        return WATER_SPRITES[BORDER]
     end
 
     return WATER_SPRITES[water_amount]
@@ -86,14 +91,20 @@ end
 
 
 function prepair(universe::Universe)
-    element = Element(universe, SquareGreedIndex(WIDTH // 2, 5))
+    element = Element(universe, SquareGreedIndex(WIDTH ÷ 2, 5))
     element << (type=WATER_SOURCE,)
+
+    complete_turn!(universe)
 end
 
 
 function flow(from, to, amount=1)
-    to << (water=Water(to.properties.water.value + amount),)
-    from << (water=Water(from.properties.water.value - amount),)
+    if amount < 0
+        error("amount must be greate than zero")
+    end
+
+    to << (dynamic_water=Water(get_node(to).new.dynamic_water.value + amount),)
+    from << (static_water=Water(get_node(from).new.static_water.value - amount),)
 end
 
 
@@ -101,52 +112,51 @@ function process(universe::Universe, turns::Int64)
 
     manhattan = Neighborhood(universe.topology, manhattan_distance)
 
-    universe(turns=turns) do element
+    for i in 1:turns
+        universe(complete_turn=false) do element
 
-        println("??? $(element.topology_index)")
+            if element |> WALL |> exists
+                return
+            end
 
-        if element |> WALL |> exists
-            return
-        end
+            if element |> WATER_SOURCE |> exists
+                element << (static_water=Water(BORDER),
+                            dynamic_water=Water(BORDER))
+            end
 
-        if element |> WATER_SOURCE |> exists
-            element << (water=Water(BORDER),)
-        end
+            for neighbor in (element |> manhattan() |> shuffle!)
 
-        element = element |> new
+                if !isenabled(neighbor)
+                    continue
+                end
 
-        for neighbor in (element |> manhattan() |> new)
-            if !isenabled(neighbor)
-                continue
+                e = get_node(element)
+                n = get_node(neighbor)
 
-            elseif neighbor.properties.water == element.properties.water
-                continue
+                if n.current.static_water == e.new.static_water
+                    continue
 
-            # # TODO: contrintuitive Y direction, refactoring required
-            # elseif neighbor.topology_index.y > element.topology_index.y
-            #     if 1 < element.properties.water.value && neighbor.properties.water.value < BORDER
-            #         neighbor << (water=Water(neighbor.properties.water.value + 1),)
-            #         element << (water=Water(element.properties.water.value - 1),)
-            #     end
+                # TODO: contrintuitive Y direction, refactoring required
+                elseif neighbor.topology_index.y > element.topology_index.y
+                    if 1 < e.new.static_water.value && n.current.static_water.value < BORDER
+                        flow(element, neighbor, 1)
+                    end
 
-            # # TODO: contrintuitive Y direction, refactoring required
-            # elseif neighbor.topology_index.y < element.topology_index.y
-            #     if 1 < neighbor.properties.water.value && element.properties.water.value < BORDER
-            #         neighbor << (water=Water(neighbor.properties.water.value - 1),)
-            #         element << (water=Water(element.properties.water.value + 1),)
-            #     end
-
-            elseif neighbor.topology_index.y == element.topology_index.y
-                if neighbor.properties.water.value < element.properties.water.value
-                    println("!!!", element.topology_index, "->", neighbor.topology_index)
-                    flow(element, neighbor, 1)
-
-                # elseif element.properties.water.value < neighbor.properties.water.value
-                #     flow(neighbor, element, 1)
+                elseif neighbor.topology_index.y == element.topology_index.y
+                    if n.current.static_water.value < e.new.static_water.value
+                        flow(element, neighbor, 1)
+                    end
                 end
             end
         end
 
+        universe() do element
+            if element |> EMPTY |> exists
+                node = get_node(element)
+                element << (static_water=Water(node.new.static_water.value + node.new.dynamic_water.value),
+                            dynamic_water=Water(0))
+            end
+        end
     end
 end
 
@@ -154,7 +164,7 @@ end
 topology = SquareGreedTopology(WIDTH, HEIGHT)
 
 universe = initialize(topology,
-                      Properties(EMPTY, Water(0)),
+                      Properties(EMPTY, Water(0), Water(0)),
                       DEBUG ? Recorder[] : [TurnsLoggerRecorder(),
                                             GreedImageRecorder(CELL_SIZE, DURATION, "output.gif")])
 

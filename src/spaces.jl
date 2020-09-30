@@ -17,7 +17,7 @@ export initialize
 # TODO: does name correct
 # TODO: does topology attribute requred (SquareGreedIndex should contain all required information)
 function Universes.storage_index(storage::LinearStorage, topology::SquareGreedTopology, i::SquareGreedIndex)
-    return LinearStorageIndex((i.y - 1) * topology.height + i.x)
+    return LinearStorageIndex((i.x - 1) * topology.height + i.y)
 end
 
 
@@ -36,7 +36,7 @@ function Universes.storage_index(storage::LinearStorage, topology::HexGreedTopol
     q = i.q + topology.radius
     r = i.r + topology.radius * 2
 
-    return LinearStorageIndex((q - 1) * height + r + 1)
+    return LinearStorageIndex((r - 1) * height + q + 1)
 end
 
 
