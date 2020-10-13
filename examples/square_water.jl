@@ -103,6 +103,8 @@ function flow(from, to, amount=1)
         error("amount must be greate than zero")
     end
 
+    amount = min(amount, get_node(from).new.static_water.value)
+
     to << (dynamic_water=Water(get_node(to).new.dynamic_water.value + amount),)
     from << (static_water=Water(get_node(from).new.static_water.value - amount),)
 end
@@ -139,7 +141,7 @@ function process(universe::Universe, turns::Int64)
                 # TODO: contrintuitive Y direction, refactoring required
                 elseif neighbor.topology_index.y > element.topology_index.y
                     if 1 < e.new.static_water.value && n.current.static_water.value < BORDER
-                        flow(element, neighbor, 1)
+                        flow(element, neighbor, BORDER - n.current.static_water.value)
                     end
 
                 elseif neighbor.topology_index.y == element.topology_index.y
