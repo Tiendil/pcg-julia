@@ -65,6 +65,7 @@ const WALL_SPITE = SquareSprite(RGB(1, 1, 0), CELL_SIZE)
 const WATER_SOURCE_SPRITE = SquareSprite(RGB(1, 0, 0), CELL_SIZE)
 const WATER_SPRITES = [SquareSprite(RGB(0, 0, i / BORDER), CELL_SIZE) for i in 1:BORDER]
 const NO_WATER_SPITE = SquareSprite(RGB(0, 0, 0), CELL_SIZE)
+const OWERFLOW_SPITE = SquareSprite(RGB(0, 1, 0), CELL_SIZE)
 
 
 function GreedImages.choose_sprite(recorder::GreedImageRecorder, element)
@@ -84,7 +85,7 @@ function GreedImages.choose_sprite(recorder::GreedImageRecorder, element)
 
     # TODO: remove?
     if water_amount > BORDER
-        return WATER_SPRITES[BORDER]
+        return OWERFLOW_SPITE
     end
 
     return WATER_SPRITES[water_amount]
@@ -158,18 +159,10 @@ function process(universe::Universe, turns::Int64)
                 # TODO: contrintuitive Y direction, refactoring required
                 elseif element.topology_index.y < neighbor.topology_index.y
                     # ELEMENT on top of NEIGHBOR
-                    if e.current.static_water.value == 0
-                        if n.current.static_water.value <= BORDER
-                            pressure_bottom = 0
-                        else
-                            pressure_bottom = BORDER - e.current.static_water.value
-                        end
+                    if n.current.static_water.value <= BORDER
+                        pressure_bottom = e.current.static_water.value
                     else
-                        if n.current.static_water.value < BORDER
-                            pressure_bottom = e.current.static_water.value
-                        else
-                            pressure_bottom = e.current.static_water.value - (n.current.static_water.value - BORDER)
-                        end
+                        pressure_bottom = e.current.static_water.value + (BORDER - n.current.static_water.value)
                     end
 
                     # gravitation
@@ -179,7 +172,7 @@ function process(universe::Universe, turns::Int64)
                     if e.current.static_water.value <= BORDER
                         pressure_top = 0
                     else
-                         pressure_top = BORDER - e.current.static_water.value
+                        pressure_top = (e.current.static_water.value - BORDER)
                     end
                 end
             end
@@ -192,7 +185,9 @@ function process(universe::Universe, turns::Int64)
 
             sort!(directions, rev=true)
 
-            if directions[1][1] <= 0
+            max_pressure = directions[1][1]
+
+            if max_pressure <= 0
                 return
             end
 
@@ -214,6 +209,7 @@ function process(universe::Universe, turns::Int64)
 
             node_to_flow = Element(universe, coordinates_to_flow)
 
+            # flow(element, node_to_flow, max_pressure ÷ 2)
             flow(element, node_to_flow, 1)
         end
 
