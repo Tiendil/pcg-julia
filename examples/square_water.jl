@@ -7,6 +7,7 @@ using PCG.Types
 using PCG.Geometry
 using PCG.Storages
 using PCG.Universes
+using PCG.Topologies
 using PCG.Topologies.SquareGreedTopologies
 using PCG.Neighborhoods
 using PCG.Operations
@@ -110,6 +111,11 @@ function flow(from, to, amount=1)
 end
 
 
+function pressure(from, to)
+    return from.current.static_water.value - to.current.static_water.value
+end
+
+
 function process(universe::Universe, turns::Int64)
 
     manhattan = Neighborhood(universe.topology, manhattan_distance)
@@ -126,30 +132,89 @@ function process(universe::Universe, turns::Int64)
                             dynamic_water=Water(BORDER))
             end
 
-            for neighbor in (element |> manhattan() |> shuffle!)
+            e = get_node(element)
+
+            if e.current.static_water.value == 0
+                return
+            end
+
+            pressure_top, pressure_bottom, pressure_left, pressure_right = 0, 0, 0, 0
+
+            for neighbor in element |> manhattan()
 
                 if !isenabled(neighbor)
                     continue
                 end
 
-                e = get_node(element)
                 n = get_node(neighbor)
 
-                if n.current.static_water == e.new.static_water
-                    continue
-
-                # TODO: contrintuitive Y direction, refactoring required
-                elseif neighbor.topology_index.y > element.topology_index.y
-                    if 1 < e.new.static_water.value && n.current.static_water.value < BORDER
-                        flow(element, neighbor, BORDER - n.current.static_water.value)
+                if element.topology_index.y == neighbor.topology_index.y
+                    if element.topology_index.x < neighbor.topology_index.x
+                        pressure_right += pressure(e, n)
+                    else
+                        pressure_left += pressure(e, n)
                     end
 
-                elseif neighbor.topology_index.y == element.topology_index.y
-                    if n.current.static_water.value < e.new.static_water.value
-                        flow(element, neighbor, 1)
+                # TODO: contrintuitive Y direction, refactoring required
+                elseif element.topology_index.y < neighbor.topology_index.y
+                    # ELEMENT on top of NEIGHBOR
+                    if e.current.static_water.value == 0
+                        if n.current.static_water.value <= BORDER
+                            pressure_bottom = 0
+                        else
+                            pressure_bottom = BORDER - e.current.static_water.value
+                        end
+                    else
+                        if n.current.static_water.value < BORDER
+                            pressure_bottom = e.current.static_water.value
+                        else
+                            pressure_bottom = e.current.static_water.value - (n.current.static_water.value - BORDER)
+                        end
+                    end
+
+                    # gravitation
+                    pressure_bottom += e.current.static_water.value
+                else
+                    # ELEMENT on bottom of NEIGHBOR
+                    if e.current.static_water.value <= BORDER
+                        pressure_top = 0
+                    else
+                         pressure_top = BORDER - e.current.static_water.value
                     end
                 end
             end
+
+            # add rand to randomize sorting order in case two or more preassures are equal
+            directions = [(pressure_top, rand(), 1),
+                          (pressure_bottom, rand(), 2),
+                          (pressure_left, rand(), 3),
+                          (pressure_right, rand(), 4)]
+
+            sort!(directions, rev=true)
+
+            if directions[1][1] <= 0
+                return
+            end
+
+            direction = directions[1][3]
+
+            if direction == 1
+                coordinates_to_flow = element.topology_index + SquareGreedIndex(0, -1)
+            elseif direction == 2
+                coordinates_to_flow = element.topology_index + SquareGreedIndex(0, 1)
+            elseif direction == 3
+                coordinates_to_flow = element.topology_index + SquareGreedIndex(-1, 0)
+            else
+                coordinates_to_flow = element.topology_index + SquareGreedIndex(1, 0)
+            end
+
+            if !is_valid(universe.topology, coordinates_to_flow)
+                return
+            end
+
+            node_to_flow = Element(universe, coordinates_to_flow)
+
+            flow(element, node_to_flow, 1)
         end
 
         universe() do element
